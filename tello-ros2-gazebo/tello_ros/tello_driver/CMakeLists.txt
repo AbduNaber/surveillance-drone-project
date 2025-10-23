@@ -42,6 +42,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tello_msgs REQUIRED)
 
+
 # Package includes not needed for CMake >= 2.8.11
 include_directories(
   include
@@ -89,6 +90,7 @@ target_compile_definitions(tello_driver_node
   PRIVATE "COMPOSITION_BUILDING_DLL")
 
 ament_target_dependencies(tello_driver_node
+  "rclcpp_components"
   ${DRIVER_NODE_DEPS})
 
 rclcpp_components_register_nodes(tello_driver_node "tello_driver::TelloDriverNode")
@@ -109,7 +111,9 @@ target_compile_definitions(tello_driver_node
 
 add_executable(tello_emulator src/tello_emulator.cpp)
 
-ament_target_dependencies(tello_emulator)
+ament_target_dependencies(tello_emulator
+"rclcpp_components"
+)
 
 target_compile_definitions(tello_emulator
   PRIVATE ASIO_STANDALONE
@@ -136,6 +140,7 @@ target_compile_definitions(tello_joy_node
   PRIVATE "COMPOSITION_BUILDING_DLL")
 
 ament_target_dependencies(tello_joy_node
+  "rclcpp_components"
   ${JOY_NODE_DEPS})
 
 rclcpp_components_register_nodes(tello_joy_node "tello_joy::TelloJoyNode")
@@ -158,6 +163,7 @@ add_executable(tello_driver_main
   ${DRIVER_NODE_SOURCES})
 
 ament_target_dependencies(tello_driver_main
+  "rclcpp_components"
   ${DRIVER_NODE_DEPS})
 
 # Can't find_package(ffmpeg), so ament_target_dependencies won't work
@@ -178,6 +184,7 @@ add_executable(tello_joy_main
   ${JOY_NODE_SOURCES})
 
 ament_target_dependencies(tello_joy_main
+  "rclcpp_components"
   ${JOY_NODE_DEPS})
 
 #=============

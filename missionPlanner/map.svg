@@ -1,0 +1,49 @@
+   <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+   <svg
+      width="200cm"
+      height="200cm"
+      viewBox="0 0 4000 4000"
+      version="1.1"
+      id="svg1"
+      xmlns="http://www.w3.org/2000/svg"
+      xmlns:svg="http://www.w3.org/2000/svg">
+
+      <path
+         style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+         d="m 0,0 v 4000 0 0 0"
+         id="wall6" />
+      <path
+         style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+         d="M 4000,4000 H 0"
+         id="wall5" />
+      <path
+         style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+         d="m 4000,0 v 4000 0 0"
+         id="wall4" />
+      <path
+         style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+         d="M 0,0 H 4000 V 0 0"
+         id="wall3" />
+      <path
+         style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+         d="M 0,3005.6666 2800,3000"
+         id="wall2" />
+      <path
+         style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+         d="M 0,795.86666 2800,2200"
+         id="wall1" />
+      <ellipse
+         style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+         id="B"
+         cx="3091.7332"
+         cy="693.46387"
+         rx="91.733322"
+         ry="93.463837" />
+      <circle
+         style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+         id="A"
+         cx="700"
+         cy="3500"
+         r="100" />
+
+   </svg>

@@ -10,6 +10,9 @@ find_package(ament_cmake REQUIRED)
 #=============
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/urdf")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
+
 
 foreach (INDEX RANGE 0 8)
   if (${INDEX} EQUAL 0)

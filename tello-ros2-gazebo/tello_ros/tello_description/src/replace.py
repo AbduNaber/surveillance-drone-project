@@ -30,5 +30,5 @@ if len(sys.argv) < 2:
     print('usage: replace.py something.xml foo=1 bar=2.0 fee=string random="also a string"', file=sys.stderr)
     sys.exit(1)
 
-f = open(sys.argv[1], 'r')
-print(replace(f.read(), parse_args(sys.argv[2:])))
+with open(sys.argv[1], 'r') as f:
+    print(replace(f.read(), parse_args(sys.argv[2:])))
