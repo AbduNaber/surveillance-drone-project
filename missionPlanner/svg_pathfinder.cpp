@@ -18,6 +18,7 @@ struct Cell {
   bool isStart = false;
   bool isEnd = false;
 };
+
 struct Node {
   int x, y;
   double g = 0, h = 0;
@@ -137,6 +138,7 @@ int main() {
     double x1, y1, x2, y2;
     ss >> cmd;
     if (cmd == 'M' || cmd == 'm') {
+      
       ss >> x1;
       ss.ignore();
       ss >> y1;
@@ -147,6 +149,7 @@ int main() {
         x2 = x1;
         y2 = y1;
       }
+      std::cout << x1 << " " << x2 << " " << y1 << " " << y2 << std::endl ; 
       walls.emplace_back(x1, y1, x2, y2);
     }
   }

@@ -18,7 +18,7 @@ build: $(SRC)
 	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
 
 # Debug build suitable for GDB in VSCode
-debug: CXXFLAGS += -g -O0
+debug: CXXFLAGS += -g -O0 
 debug: $(SRC)
 	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)_debug $(LDFLAGS)
 
