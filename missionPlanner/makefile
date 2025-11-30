@@ -1,41 +1,33 @@
-# Makefile for svg_pathfinder - VSCode GDB friendly
+# Compiler and flags
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -O2
 
-CXX := g++
-SRC := svg_pathfinder.cpp
-SRC2 := test_svgpp.cpp
-TARGET := svg_pathfinder
+# Executable name
+TARGET = grid_map
 
+# Source files
+SRCS = main.cpp gridMap.cpp gridMapContext.cpp
 
-
-# Default flags
-CXXFLAGS := -std=c++17 -Wall -Wextra
-LDFLAGS := -ltinyxml2
-
-.PHONY: all build debug run run-debug clean v2
+# Object directory and files
+OBJDIR = obj
+OBJS = $(patsubst %.cpp,$(OBJDIR)/%.o,$(SRCS))
 
 # Default target
-all: v2
+all: $(TARGET)
 
-v2: $(SRC2)
-	$(CXX) $(CXXFLAGS) $(SRC2) -o $(TARGET) 
+# Link step
+$(TARGET): $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^
 
-# Release build
-build: $(SRC)
-	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
+# Compile step for each .cpp into $(OBJDIR)
+$(OBJDIR)/%.o: %.cpp common.hpp
+	@mkdir -p $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Debug build suitable for GDB in VSCode
-debug: CXXFLAGS += -g -O0 
-debug: $(SRC)
-	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)_debug $(LDFLAGS)
-
-# Run release binary
-run:  v2#build
-	./$(TARGET)
-
-# Run debug binary with SVG_DEBUG
-run-debug: debug
-	SVG_DEBUG=1 ./$(TARGET)_debug
-
-# Clean all binaries and generated SVG
+# Clean build artifacts
 clean:
-	rm -f $(TARGET) $(TARGET)_debug map_with_path.svg
+	rm -rf $(OBJDIR) $(TARGET)
+
+# Run executable
+run: $(TARGET)
+	./$(TARGET)
