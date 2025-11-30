@@ -1,0 +1,32 @@
+#pragma once
+
+#include <vector>
+#include "common.hpp"
+
+class gridMap
+{
+public:
+    // Constructor
+    gridMap(int size);
+
+    // Setters
+    void setBlocked(const coordinate &c);
+    void setStart(const coordinate &c);
+    void setEnd(const coordinate &c);
+    void setPath(const coordinate &c);
+
+    // Getters
+    bool isBlocked(const coordinate &c) const;
+    bool isStart(const coordinate &c) const;
+    bool isEnd(const coordinate &c) const;
+    bool isPath(const coordinate &c) const;
+    
+    int getSize() const;
+
+private:
+    int size_;
+    // Assuming 'struct Cell' is defined in common.hpp
+    std::vector<std::vector<Cell>> grid_; 
+
+    bool isValid(int x, int y) const ;
+};
