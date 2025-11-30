@@ -11,4 +11,11 @@ struct Cell
     bool blocked = false;
     bool isStart = false;
     bool isEnd = false;
+    bool isPath = false ;
+};
+
+struct coordinate
+{
+    int x;
+    int y;
 };

@@ -1,17 +1,8 @@
 #include "gridMap.cpp"
 #include "gridMapContext.cpp"
 #include "common.hpp"
+//#include "pathFinder.cpp"
 
-
-/*TODO
- * function: findPath
- * description: Implements A* pathfinding algorithm to find a path from start to end on the grid map.
- * parameters:
- *   - map: Reference to the gridMap object representing the environment.
- *   - startX, startY: Coordinates of the start position.
- *   - endX, endY: Coordinates of the end position.
-    * returns: gridMap with the path marked.
-*/
 
 
 
@@ -48,6 +39,7 @@ void loadSvgToGrid(const char *filename, gridMap &map, double cellSize)
 
 
 
+
 int main()
 {
 
@@ -58,6 +50,8 @@ int main()
     gridMap map(gridSize);
 
     loadSvgToGrid(filename, map, cellSize);
+
+    //findPath(map, coordinate{700, 3500}, coordinate{3091, 693});
 
     std::cout << "Grid loaded from SVG." << std::endl;
 

@@ -1,12 +1,12 @@
 # Compiler and flags
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -O2
+CXXFLAGS = -std=c++17 -Wall 
 
 # Executable name
 TARGET = grid_map
 
 # Source files
-SRCS = main.cpp gridMap.cpp gridMapContext.cpp
+SRCS = main.cpp gridMap.cpp gridMapContext.cpp pathFinder.cpp
 
 # Object directory and files
 OBJDIR = obj

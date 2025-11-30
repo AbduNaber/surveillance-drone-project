@@ -6,7 +6,7 @@
 #include <svgpp/svgpp.hpp>
 #include <svgpp/policy/basic_shapes.hpp>
 #include <svgpp/policy/basic_shapes_events.hpp>
-
+#include "common.hpp"
 
 using namespace svgpp;
 
