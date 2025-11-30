@@ -4,11 +4,31 @@
 #include <string>
 #include <vector>
 
-#include <svgpp/svgpp.hpp>
 #include <rapidxml_ns/rapidxml_ns.hpp>
 #include <svgpp/policy/xml/rapidxml_ns.hpp>
+#include <svgpp/svgpp.hpp>
+
+#include <svgpp/policy/basic_shapes.hpp>
+#include <svgpp/policy/basic_shapes_events.hpp>
 
 using namespace svgpp;
+
+typedef boost::mpl::set<svgpp::tag::element::svg, svgpp::tag::element::g,
+                        svgpp::tag::element::path, svgpp::tag::element::circle,
+                        svgpp::tag::element::ellipse,
+                        svgpp::tag::element::line>::type processed_elements_t;
+
+typedef boost::mpl::insert<traits::shapes_attributes_by_element,
+                           tag::attribute::id>::type processed_attributes_t;
+
+struct collect_attributes_basic_shapes_policy: svgpp::policy::basic_shapes::raw
+{
+  typedef boost::mpl::set<
+    svgpp::tag::element::ellipse,
+    svgpp::tag::element::rect,
+    svgpp::tag::element::line,
+    svgpp::tag::element::circle> collect_attributes; 
+};
 
 struct Cell {
   bool blocked = false;
@@ -19,21 +39,20 @@ struct Cell {
 class gridMap {
 
 public:
-
   gridMap(int size) : size_(size) {
     grid_.resize(size_, std::vector<struct Cell>(size_));
   }
 
   void setBlocked(int x, int y) {
     if (x >= 0 && x < size_ && y >= 0 && y < size_) {
-      //std::cout << "[DEBUG] setBlocked: (" << x << ", " << y << ")\n";
+      // std::cout << "[DEBUG] setBlocked: (" << x << ", " << y << ")\n";
       grid_[y][x].blocked = true;
     }
   }
 
   bool isBlocked(int x, int y) const {
     if (x >= 0 && x < size_ && y >= 0 && y < size_) {
-      
+
       return grid_[y][x].blocked;
     }
     return true; // Out of bounds considered blocked
@@ -44,7 +63,7 @@ public:
       grid_[y][x].isStart = true;
     }
   }
-  
+
   void setEnd(int x, int y) {
     if (x >= 0 && x < size_ && y >= 0 && y < size_) {
       grid_[y][x].isEnd = true;
@@ -59,9 +78,25 @@ private:
 };
 
 class GridMapContext {
+
 public:
   GridMapContext(gridMap &map, double cellSize)
       : map_(map), cellSize_(cellSize) {}
+
+  void set_circle(double cx, double cy, double r) {
+    std::cout << "[DEBUG] circle: center=(" << cx << ", " << cy
+              << "), radius=" << r << "\n";
+    markCircle(cx, cy, r);
+  }
+
+  void set_ellipse(double cx, double cy, double rx, double ry) {
+    std::cout << "[DEBUG] ellipse: center=(" << cx << ", " << cy
+              << "), rx=" << rx << ", ry=" << ry << "\n";
+  }
+
+  void set_line(double x1,double y1,double x2,double y2 ){
+
+  }
 
   void path_move_to(double x, double y, svgpp::tag::coordinate::absolute) {
     std::cout << "[DEBUG] path_move_to: (" << x << ", " << y << ")\n";
@@ -70,78 +105,94 @@ public:
   }
 
   void path_line_to(double x, double y, svgpp::tag::coordinate::absolute) {
-    std::cout << "[DEBUG] path_line_to: (" << lastX << ", " << lastY
-              << ") -> (" << x << ", " << y << ")\n";
+    std::cout << "[DEBUG] path_line_to: (" << lastX << ", " << lastY << ") -> ("
+              << x << ", " << y << ")\n";
     markLine(lastX, lastY, x, y);
     lastX = x;
     lastY = y;
   }
 
-  void path_cubic_bezier_to(
-    double x1, double y1,
-    double x2, double y2,
-    double x, double y,
-    tag::coordinate::absolute)
-  {
-    std::cout << "[DEBUG] path_cubic_bezier_to: (" << lastX << ", " << lastY << ") -> (" << x << ", " << y << ")\n";
+  void path_cubic_bezier_to(double x1, double y1, double x2, double y2,
+                            double x, double y, tag::coordinate::absolute) {
+    std::cout << "[DEBUG] path_cubic_bezier_to: (" << lastX << ", " << lastY
+              << ") -> (" << x << ", " << y << ")\n";
   }
 
-  void path_quadratic_bezier_to(
-    double x1, double y1,
-    double x, double y,
-    tag::coordinate::absolute)
-  {
+  void path_quadratic_bezier_to(double x1, double y1, double x, double y,
+                                tag::coordinate::absolute) {
 
-    std::cout << "[DEBUG] path_quadratic_bezier_to: (" << lastX << ", " << lastY << ") -> (" << x << ", " << y << ")\n";
+    std::cout << "[DEBUG] path_quadratic_bezier_to: (" << lastX << ", " << lastY
+              << ") -> (" << x << ", " << y << ")\n";
   }
 
-  void path_elliptical_arc_to(
-    double rx, double ry, double x_axis_rotation,
-    bool large_arc_flag, bool sweep_flag,
-    double x, double y,
-    tag::coordinate::absolute)
-  {
-    std::cout << "[DEBUG] path_elliptical_arc_to: (" << lastX << ", " << lastY << ") -> (" << x << ", " << y << ")\n";  
+  void path_elliptical_arc_to(double rx, double ry, double x_axis_rotation,
+                              bool large_arc_flag, bool sweep_flag, double x,
+                              double y, tag::coordinate::absolute) {
+    std::cout << "[DEBUG] path_elliptical_arc_to: (" << lastX << ", " << lastY
+              << ") -> (" << x << ", " << y << ")\n";
   }
 
-  void path_close_subpath()
-  {
-    std::cout << "[DEBUG] path_close_subpath\n";
+  void path_close_subpath() { std::cout << "[DEBUG] path_close_subpath\n"; }
+
+  void path_exit() { std::cout << "[DEBUG] path_exit\n"; }
+
+  void on_exit_element() {
+    if (insideCircle) {
+      markCircle(cx_, cy_, r_);
+      insideCircle = false;
+    }
   }
 
-  void path_exit()
-  {
-    std::cout << "[DEBUG] path_exit\n";
+  void on_enter_element(tag::element::any) {}
+
+  void on_enter_element(tag::element::line) {
+    std::cout << "[DEBUG] on_enter_element: line\n";
+  }
+  void on_enter_element(tag::element::circle) {
+    std::cout << "[DEBUG] on_enter_element: circle\n";
+    insideCircle = true;
   }
 
-  void on_exit_element()
-  {
-    // No-op
+  void on_enter_element(tag::element::ellipse) {
+    std::cout << "[DEBUG] on_enter_element: ellipse\n";
+  }
+  void on_enter_element(tag::element::path) {
+    std::cout << "[DEBUG] on_enter_element: path\n";
   }
 
-  void on_enter_element(tag::element::any)
-  {
-    // No-op
+  template <class IRI> void set(svgpp::tag::attribute::id, IRI const &value) {
+    std::cout << "ID: " << value << std::endl;
+    if (value == "A") {
+      startOrEnd = 0;
+    } else if (value == "B") {
+      startOrEnd = 1;
+    }
   }
 
-
-
-  void circle(double cx, double cy, double r) { 
-    std::cout << "[DEBUG] circle: center=(" << cx << ", " << cy << "), radius=" << r << "\n"; 
-    markCircle(cx, cy, r); }
-
-  void ellipse(double cx, double cy, double rx, double ry) {
-    std::cout << "[DEBUG] ellipse: center=(" << cx << ", " << cy << "), rx=" << rx << ", ry=" << ry << "\n";
-    markEllipse(cx, cy, rx, ry);
+  void set(svgpp::tag::attribute::cx, double v) {
+    std::cout << "enters cx" << std::endl;
+    cx_ = v;
+  }
+  void set(svgpp::tag::attribute::cy, double v) {
+    std::cout << "enters cy" << std::endl;
+    cy_ = v;
+  }
+  void set(svgpp::tag::attribute::r, double v) {
+    std::cout << "enters r" << std::endl;
+    r_ = v;
   }
 
 private:
   gridMap &map_;
   double cellSize_;
   double lastX = 0, lastY = 0;
+  int startOrEnd;
+  double cx_, cy_, r_;
+  bool insideCircle = false;
 
   void markLine(double x0, double y0, double x1, double y1) {
-    std::cout << "[DEBUG] markLine: (" << x0 << ", " << y0 << ") -> (" << x1 << ", " << y1 << ")\n";
+    std::cout << "[DEBUG] markLine: (" << x0 << ", " << y0 << ") -> (" << x1
+              << ", " << y1 << ")\n";
     // Bresenham for grid indices
     int gx0 = int(x0 / cellSize_);
     int gy0 = int(y0 / cellSize_);
@@ -169,7 +220,8 @@ private:
   }
 
   void markCircle(double cx, double cy, double r) {
-    std::cout << "[DEBUG] markCircle: center=(" << cx << ", " << cy << "), radius=" << r << "\n";
+    std::cout << "[DEBUG] markCircle: center=(" << cx << ", " << cy
+              << "), radius=" << r << "\n";
     int gx0 = int((cx - r) / cellSize_);
     int gy0 = int((cy - r) / cellSize_);
     int gx1 = int((cx + r) / cellSize_);
@@ -184,37 +236,9 @@ private:
       }
   }
 
-  void markEllipse(double cx, double cy, double rx, double ry) {
-    std::cout << "[DEBUG] markEllipse: center=(" << cx << ", " << cy << "), rx=" << rx << ", ry=" << ry << "\n";
-    int gx0 = int((cx - rx) / cellSize_);
-    int gy0 = int((cy - ry) / cellSize_);
-    int gx1 = int((cx + rx) / cellSize_);
-    int gy1 = int((cy + ry) / cellSize_);
-
-    for (int x = gx0; x <= gx1; x++)
-      for (int y = gy0; y <= gy1; y++) {
-        double dx = (x * cellSize_ - cx) / rx;
-        double dy = (y * cellSize_ - cy) / ry;
-        if (dx * dx + dy * dy <= 1)
-          map_.setBlocked(x, y);
-      }
-  }
 };
 
-
-
-typedef boost::mpl::set<svgpp::tag::element::svg, svgpp::tag::element::g,
-                          svgpp::tag::element::path,
-                          svgpp::tag::element::circle,
-                          svgpp::tag::element::ellipse,
-                          svgpp::tag::element::line>::type processed_elements_t;
-
-
-typedef boost::mpl::insert<traits::shapes_attributes_by_element>::type
-    processed_attributes_t;
-
-
-void loadSvgToGrid(const char *filename, gridMap &map, double cellSize ) {
+void loadSvgToGrid(const char *filename, gridMap &map, double cellSize) {
 
   std::ifstream file(filename);
   if (!file.is_open()) {
@@ -235,35 +259,26 @@ void loadSvgToGrid(const char *filename, gridMap &map, double cellSize ) {
 
   std::cout << "Loading SVG file: " << filename << std::endl;
 
-
   GridMapContext context(map, cellSize);
-
-
-  svgpp::document_traversal<
+	svgpp::document_traversal<
       svgpp::processed_elements<processed_elements_t>,
-      svgpp::processed_attributes<
-          processed_attributes_t
-          >
-          >::load_document(root,
-                           context);
-
-
+      svgpp::processed_attributes<processed_attributes_t>,
+      svgpp::basic_shapes_policy<collect_attributes_basic_shapes_policy>
+      >::load_document(root, context);
 }
-
-
 
 int main() {
 
   const char *filename = "map.svg";
   const int gridSize = 200;
-  const double cellSize = 20.0; // each cell represents 1 unit in SVG coordinates
+  const double cellSize =
+      20.0; // each cell represents 1 unit in SVG coordinates
   gridMap map(gridSize);
 
-  
   loadSvgToGrid(filename, map, cellSize);
 
   std::cout << "Grid loaded from SVG." << std::endl;
-  
+
   // direct to file output
   std::ofstream outfile("grid_output.txt");
   if (!outfile.is_open()) {
@@ -280,3 +295,7 @@ int main() {
   std::cout << "Grid output written to grid_output.txt" << std::endl;
   return 0;
 }
+
+/*  TODO
+ *  
+ */

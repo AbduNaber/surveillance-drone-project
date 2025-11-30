@@ -5,73 +5,52 @@
    viewBox="0 0 4000 4000"
    version="1.1"
    id="svg1"
-   sodipodi:docname="map.svg"
-   inkscape:version="1.4.2 (ebf0e94, 2025-05-08)"
-   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
      id="defs1" />
-  <sodipodi:namedview
-     id="namedview1"
-     pagecolor="#505050"
-     bordercolor="#ffffff"
-     borderopacity="1"
-     inkscape:showpageshadow="0"
-     inkscape:pageopacity="0"
-     inkscape:pagecheckerboard="1"
-     inkscape:deskcolor="#505050"
-     inkscape:document-units="cm"
-     inkscape:zoom="0.24121365"
-     inkscape:cx="930.71019"
-     inkscape:cy="7793.9205"
-     inkscape:window-width="1920"
-     inkscape:window-height="941"
-     inkscape:window-x="0"
-     inkscape:window-y="27"
-     inkscape:window-maximized="1"
-     inkscape:current-layer="svg1" />
-     <g > 
-  <path
-     style="fill:#ff0000;stroke:#ff0000;stroke-width:18.1883"
-     d="m 155.12279,344.15288 v 3317.67942 0 0 19.0302"
-     id="wall6"
-     sodipodi:nodetypes="ccccc" />
-  <path
-     style="fill:#ff0000;stroke:#ff0000;stroke-width:19.0302"
-     d="M 3785.7386,3671.3474 H 164.23824"
-     id="wall5" />
-  <path
-     style="fill:#ff0000;stroke:#ff0000;stroke-width:18.2146"
-     d="m 3785.7386,344.11228 v 3317.72002 0 0"
-     id="wall4" />
-  <path
-     style="fill:#ff0000;stroke:#ff0000;stroke-width:19.0542"
-     d="M 155.12279,353.67998 H 3785.7386 v 0 0"
-     id="wall3" />
-  <path
-     style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
-     d="m 164.25848,2771.9515 2800.00002,-5.6666"
-     id="wall2" />
-  <path
-     style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
-     d="M 155.12279,353.67998 2950.49,1751.24"
-     id="wall1"
-     sodipodi:nodetypes="cc" />
-  <ellipse
-     style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
-     id="B"
-     cx="3091.7332"
-     cy="693.46387"
-     rx="91.733322"
-     ry="93.463837" />
-  <circle
-     style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
-     id="A"
-     cx="700"
-     cy="3500"
-     r="100" />
+  <g
+     id="g1">
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:18.1883"
+       d="m 155.12279,344.15288 v 3317.67942 0 0 19.0302"
+       id="wall6" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:19.0302"
+       d="M 3785.7386,3671.3474 H 164.23824"
+       id="wall5" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:18.2146"
+       d="m 3785.7386,344.11228 v 3317.72002 0 0"
+       id="wall4" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:19.0542"
+       d="M 155.12279,353.67998 H 3785.7386 v 0 0"
+       id="wall3" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+       d="m 164.25848,2771.9515 2800.00002,-5.6666"
+       id="wall2" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+       d="M 155.12279,353.67998 2950.49,1751.24"
+       id="wall1" />
 
-     </g>
+
+
+       <circle
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+       
+       cx="3091.7332"
+       cy="693.46387"
+       r="100"
+       id="B" />
+    <circle
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
+       
+       cx="700"
+       cy="3500"
+       r="100"
+       id="A" />
+  </g>
 </svg>

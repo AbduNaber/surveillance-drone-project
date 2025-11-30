@@ -2,16 +2,22 @@
 
 CXX := g++
 SRC := svg_pathfinder.cpp
+SRC2 := test_svgpp.cpp
 TARGET := svg_pathfinder
+
+
 
 # Default flags
 CXXFLAGS := -std=c++17 -Wall -Wextra
 LDFLAGS := -ltinyxml2
 
-.PHONY: all build debug run run-debug clean
+.PHONY: all build debug run run-debug clean v2
 
 # Default target
-all: build
+all: v2
+
+v2: $(SRC2)
+	$(CXX) $(CXXFLAGS) $(SRC2) -o $(TARGET) 
 
 # Release build
 build: $(SRC)
@@ -23,7 +29,7 @@ debug: $(SRC)
 	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)_debug $(LDFLAGS)
 
 # Run release binary
-run: build
+run:  v2#build
 	./$(TARGET)
 
 # Run debug binary with SVG_DEBUG

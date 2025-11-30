@@ -1,2 +1,1 @@
 g++ test_svgpp.cpp -o parse_svg -std=c++17
-g++ test_svgpp.cpp -o parse_svg -std=c++17 -ltinyxml2
