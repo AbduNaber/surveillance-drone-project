@@ -15,18 +15,32 @@ typedef boost::mpl::set<svgpp::tag::element::svg, svgpp::tag::element::g,
                         svgpp::tag::element::ellipse,
                         svgpp::tag::element::line>::type processed_elements_t;
 
-typedef boost::mpl::insert<traits::shapes_attributes_by_element,
-                           tag::attribute::id>::type processed_attributes_t;
 
-struct collect_attributes_basic_shapes_policy
+
+typedef boost::mpl::set<
+        boost::mpl::pair<tag::element::path, tag::attribute::d>,
+        boost::mpl::pair<tag::element::circle, tag::attribute::cx>,
+        boost::mpl::pair<tag::element::circle, tag::attribute::cy>,
+        boost::mpl::pair<tag::element::circle, tag::attribute::r>,
+        tag::attribute::cx,
+        tag::attribute::cy,
+        tag::attribute::r,
+        tag::attribute::id
+  >::type processed_attributes_t;
+
+
+// typedef boost::mpl::insert<traits::shapes_attributes_by_element,
+//                         tag::attribute::id>::type processed_attributes_t;
+
+
+struct circle_policy
     : svgpp::policy::basic_shapes::raw
 {
-    typedef boost::mpl::set<svgpp::tag::element::ellipse,
-                            svgpp::tag::element::rect, svgpp::tag::element::line,
+    typedef boost::mpl::set<
+
                             svgpp::tag::element::circle>
         collect_attributes;
 };
-
 
 
 class GridMapContext
@@ -40,7 +54,10 @@ public:
     {
         std::cout << "[DEBUG] circle: center=(" << cx << ", " << cy
                   << "), radius=" << r << "\n";
+
         markCircle(cx, cy, r);
+
+        
     }
 
     void set_ellipse(double cx, double cy, double rx, double ry)
@@ -96,9 +113,10 @@ public:
 
     void on_exit_element()
     {
+        std::cout << "[DEBUG] on_exit_element\n";
         if (insideCircle)
         {
-            markCircle(cx_, cy_, r_);
+            
             insideCircle = false;
         }
     }
@@ -128,11 +146,14 @@ public:
     void set(svgpp::tag::attribute::id, IRI const &value)
     {
         std::cout << "ID: " << value << std::endl;
-        if (value == "A")
+
+        std::string str(value.begin(), value.end());
+
+        if (str == "A")
         {
             startOrEnd = 0;
         }
-        else if (value == "B")
+        else if (str == "B")
         {
             startOrEnd = 1;
         }
@@ -140,17 +161,17 @@ public:
 
     void set(svgpp::tag::attribute::cx, double v)
     {
-        std::cout << "enters cx" << std::endl;
+        
         cx_ = v;
     }
     void set(svgpp::tag::attribute::cy, double v)
     {
-        std::cout << "enters cy" << std::endl;
+        
         cy_ = v;
     }
     void set(svgpp::tag::attribute::r, double v)
     {
-        std::cout << "enters r" << std::endl;
+        
         r_ = v;
     }
 
@@ -158,7 +179,7 @@ private:
     gridMap &map_;
     double cellSize_;
     double lastX = 0, lastY = 0;
-    int startOrEnd;
+    int startOrEnd = -1; // 0 for start, 1 for end
     double cx_, cy_, r_;
     bool insideCircle = false;
 
@@ -178,7 +199,7 @@ private:
 
         while (true)
         {
-            map_.setBlocked(gx0, gy0);
+            map_.setBlocked(coordinate{gx0, gy0});
             if (gx0 == gx1 && gy0 == gy1)
                 break;
             e2 = 2 * err;
@@ -204,19 +225,30 @@ private:
         int gx1 = int((cx + r) / cellSize_);
         int gy1 = int((cy + r) / cellSize_);
 
+
+
+
         for (int x = gx0; x <= gx1; x++)
             for (int y = gy0; y <= gy1; y++)
             {
                 double dx = x * cellSize_ - cx;
                 double dy = y * cellSize_ - cy;
-                if (dx * dx + dy * dy <= r * r)
-                    map_.setBlocked(x, y);
+                if (dx * dx + dy * dy <= r * r){
+                    if(startOrEnd == 0)
+                        map_.setStart(coordinate{x, y});
+                    else if (startOrEnd == 1)
+                        map_.setEnd(coordinate{x, y});
+                    else
+                        map_.setBlocked(coordinate{x, y});
+                }
+
+                    
             }
     }
 };
 
 
 
-/*  TODO
- *
- */
+/*TODO
+    start ile bitis noktasini daireden ayir
+*/
