@@ -50,6 +50,55 @@ void loadSvgToGrid(const char *filename, gridMap &map, double cellSize)
     >::load_document(root, context);
 }
 
+
+
+
+void exportToSVG(const gridMap &map, const std::string &filename, int cellSize)
+{
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Cannot open SVG file for writing\n";
+        return;
+    }
+
+    int size = map.getSize();
+    int width = size * cellSize;
+    int height = size * cellSize;
+
+    // SVG Header
+    file << "<svg xmlns='http://www.w3.org/2000/svg' width='" 
+         << width << "' height='" << height 
+         << "' viewBox='0 0 " << width << " " << height << "'>\n";
+
+    // Draw grid cells
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+
+            std::string color = "white";
+
+            if (map.isBlocked(coordinate{x, y}))
+                color = "red";
+            else if (map.isStart(coordinate{x, y}))
+                color = "green";
+            else if (map.isEnd(coordinate{x, y}))
+                color = "blue";
+            else if (map.isPath(coordinate{x, y}))
+                color = "yellow";
+
+            file << "<rect x='" << x * cellSize 
+                 << "' y='" << y * cellSize
+                 << "' width='" << cellSize
+                 << "' height='" << cellSize
+                 << "' fill='" << color << "' stroke='lightgray' stroke-width='0.2'/>\n";
+        }
+    }
+
+    file << "</svg>";
+    file.close();
+
+    std::cout << "SVG exported to: " << filename << "\n";
+}
+
 int main()
 {
     const char *filename = "map.svg";
@@ -87,12 +136,14 @@ int main()
         if (startFound && endFound) break;
     }
 
+    PathFinder pathFinder;
+
     // Eğer SVG'den start/end okuyabildiysek yolu bul
     if (startFound && endFound) {
         std::cout << "Start found at: (" << startCoord.x << ", " << startCoord.y << ")\n";
         std::cout << "End found at: (" << endCoord.x << ", " << endCoord.y << ")\n";
         
-        findPath(map, startCoord, endCoord);
+        pathFinder.findPath(map, startCoord, endCoord);
     } else {
         std::cout << "Uyarı: Start veya End noktası SVG içinde (ID='A' veya ID='B') bulunamadı.\n";
         // İstersen burada manuel bir koordinat da deneyebilirsin:
@@ -122,6 +173,11 @@ int main()
     }
     outfile.close();
     std::cout << "Grid output written to grid_output.txt" << std::endl;
+
+
+    pathFinder.printPath();
+
+    exportToSVG(map, "output.svg", cellSize);
 
     return 0;
 }

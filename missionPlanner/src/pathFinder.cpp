@@ -1,38 +1,7 @@
 #include "pathFinder.hpp"
-#include <queue>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-#include <cmath>
-#include <iostream>
 
-// --- Internal Helper Structures ---
 
-struct CoordinateHash {
-    std::size_t operator()(const coordinate &c) const noexcept
-    {
-        return std::hash<int>()(c.x) ^ (std::hash<int>()(c.y) << 1);
-    }
-};
-
-struct CoordinateEqual {
-    bool operator()(const coordinate &a, const coordinate &b) const noexcept
-    {
-        return a.x == b.x && a.y == b.y;
-    }
-};
-
-// Internal heuristic function (Euclidean distance)
-static double heuristic(const coordinate &a, const coordinate &b)
-{
-    double dx = double(a.x - b.x);
-    double dy = double(a.y - b.y);
-    return std::sqrt(dx * dx + dy * dy);
-}
-
-// --- Main Implementation ---
-
-void findPath(gridMap &map, coordinate start, coordinate end)
+void PathFinder::findPath(gridMap &map, coordinate start, coordinate end)
 {
     // trivial cases
     if (start.x == end.x && start.y == end.y)
@@ -78,9 +47,11 @@ void findPath(gridMap &map, coordinate start, coordinate end)
         if (current.x == end.x && current.y == end.y)
         {
             // Reconstruct path (mark intermediate cells)
+            path.clear();
             coordinate node = end;
             while (!(node.x == start.x && node.y == start.y))
             {
+                path.push_back(node);
                 // Don't overwrite start/end markers if you want to preserve them
                 if (!(node.x == end.x && node.y == end.y) && !(node.x == start.x && node.y == start.y))
                 {
@@ -92,6 +63,8 @@ void findPath(gridMap &map, coordinate start, coordinate end)
                     break;
                 node = it->second;
             }
+
+            std::reverse(path.begin(), path.end());
             std::cout << "[DEBUG] Path found from (" << start.x << "," << start.y << ") to (" << end.x << "," << end.y << ")\n";
             return;
         }
@@ -121,4 +94,52 @@ void findPath(gridMap &map, coordinate start, coordinate end)
     }
 
     std::cout << "[DEBUG] No path found from (" << start.x << "," << start.y << ") to (" << end.x << "," << end.y << ")\n";
+}
+
+void PathFinder::printPath(){
+    if (path.empty())
+    {
+        std::cout << "[DEBUG] Path is empty.\n";
+        return;
+    }
+
+    // --- 1) Find bounding box of the path ---
+    int minX = path[0].x, maxX = path[0].x;
+    int minY = path[0].y, maxY = path[0].y;
+
+    for (auto &p : path)
+    {
+        minX = std::min(minX, p.x);
+        maxX = std::max(maxX, p.x);
+        minY = std::min(minY, p.y);
+        maxY = std::max(maxY, p.y);
+    }
+
+    int width = maxX - minX + 1;
+    int height = maxY - minY + 1;
+
+    // --- 2) Create empty grid (.) ---
+    std::vector<std::vector<char>> grid(height, std::vector<char>(width, '.'));
+
+    // --- 3) Mark the path (*) ---
+    for (auto &p : path)
+    {
+        int gx = p.x - minX;
+        int gy = p.y - minY;
+        grid[gy][gx] = '*';
+    }
+
+    // Mark start and end
+    coordinate S = path.front();
+    coordinate E = path.back();
+    grid[S.y - minY][S.x - minX] = 'S';
+    grid[E.y - minY][E.x - minX] = 'E';
+
+    // --- 4) Print the grid ---
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+            std::cout << grid[y][x];
+        std::cout << "\n";
+    }
 }
