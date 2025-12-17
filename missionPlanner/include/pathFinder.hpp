@@ -10,8 +10,10 @@
 #include <cmath>
 #include <iostream>
 #include <algorithm>
+#include <map>
 
 
+using IsBlockedFn = std::function<bool(int,int)>;
 
 
 struct CoordinateHash {
@@ -28,6 +30,51 @@ struct CoordinateEqual {
     }
 };
 
+typedef enum {
+
+    // Basic takeoff / landing
+    CMD_TAKEOFF,
+    CMD_LAND,
+    CMD_EMERGENCY,
+
+    // Basic 6-direction movement (distance-based)
+    CMD_MOVE_UP,
+    CMD_MOVE_DOWN,
+    CMD_MOVE_LEFT,
+    CMD_MOVE_RIGHT,
+    CMD_MOVE_FORWARD,
+    CMD_MOVE_BACK,
+
+    // Rotational movement
+    CMD_ROTATE_CW,
+    CMD_ROTATE_CCW,
+
+    // Hover / stop
+    CMD_STOP,
+
+    // Advanced point-to-point movement
+    CMD_GO_XYZ_SPEED,
+    CMD_CURVE_X1Y1Z1_X2Y2Z2_SPEED,
+    CMD_JUMP_XYZ_SPEED_YAW_MID,
+
+    // Flip maneuvers
+    CMD_FLIP_LEFT,
+    CMD_FLIP_RIGHT,
+    CMD_FLIP_FORWARD,
+    CMD_FLIP_BACK,
+
+    // Raw velocity control (RC)
+    CMD_RC_CONTROL,
+
+    // Camera control
+    CMD_SET_VIDEO_DIRECTION,
+
+    // Speed settings
+    CMD_SET_SPEED,
+
+    // Unknown / unsupported
+    CMD_UNKNOWN
+} DroneCommand;
 
 
 class PathFinder
@@ -38,10 +85,20 @@ public:
     std::vector<coordinate>& getPath() { return path; }
 
     void printPath();
-
+    void generateCommands(); 
+    std::vector<coordinate> smoothPathLOS(const std::vector<coordinate>& path,const IsBlockedFn& isBlocked , int maxJumpCells);
+    bool lineFree(const coordinate& a, const coordinate& b, const IsBlockedFn& isBlocked);
+        
+    // for debug porpose delete it
+    void setPath(const std::vector<coordinate>& newPath) { path = newPath; }
+    void buildDroneCommands( const std::vector<coordinate>& path, double initialYawRad );
+    void updateMap(gridMap &map);
+    void printDroneCommands();
 private:
+
     std::vector<coordinate> path = {};
 
+    std::vector<std::map<DroneCommand, std::string>> drone_commands; // drone commands and values as string
 
     static double heuristic(const coordinate &a, const coordinate &b)
     {
@@ -51,4 +108,7 @@ private:
     }
 
 };
+
+
+
 

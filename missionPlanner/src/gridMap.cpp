@@ -89,6 +89,19 @@ void gridMap::setPath(const coordinate &c)
     }
 }
 
+void gridMap::clear(const coordinate &c)
+{
+    int x = c.x;
+    int y = c.y;
+    if (isValid(x, y))
+    {
+        grid_[y][x].isPath = false;
+        grid_[y][x].isStart = false;
+        grid_[y][x].isEnd = false;
+        grid_[y][x].blocked = false;
+    }
+}
+
 int gridMap::getSize() const
 {
     return size_;
@@ -97,4 +110,15 @@ int gridMap::getSize() const
 
 bool gridMap::isValid(int x, int y) const {
     return (x >= 0 && x < size_ && y >= 0 && y < size_);
+}
+
+void gridMap::clearPath()
+{
+    for (int y = 0; y < size_; ++y)
+    {
+        for (int x = 0; x < size_; ++x)
+        {
+            grid_[y][x].isPath = false;
+        }
+    }
 }

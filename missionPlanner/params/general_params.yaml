@@ -1,0 +1,15 @@
+grid:
+  width: 200
+  height: 200
+  cell_size: 20
+
+map:
+  map_file: "map.svg"
+
+path_planning:
+  max_jump_distance: 5
+
+drone:
+  speed: 5.0
+  turn_rate: 30.0
+  initial_yaw_rad: 0.0

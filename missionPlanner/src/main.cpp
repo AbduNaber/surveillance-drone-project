@@ -2,6 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <yaml-cpp/yaml.h>
 
 // Sadece Header dosyalarını include ediyoruz
 #include "gridMap.hpp"
@@ -99,11 +100,40 @@ void exportToSVG(const gridMap &map, const std::string &filename, int cellSize)
     std::cout << "SVG exported to: " << filename << "\n";
 }
 
+void loadParams(const std::string &paramFile, appParams &params)
+{
+    std::ifstream file(paramFile);
+    if (!file.is_open())
+    {
+        std::cerr << "Cannot open parameter file: " << paramFile << std::endl;
+        return;
+    }
+
+    YAML::Node config = YAML::LoadFile(paramFile);
+
+    params.grid.width = config["grid"]["width"].as<int>();
+    params.grid.height = config["grid"]["height"].as<int>();
+    params.grid.cell_size = config["grid"]["cell_size"].as<double>();
+
+    params.map.map_file = config["map"]["map_file"].as<std::string>(); 
+
+    params.path_planning.max_jump_distance = config["path_planning"]["max_jump_distance"].as<int>();
+}
+
+
 int main()
 {
-    const char *filename = "map.svg";
-    const int gridSize = 200;
-    const double cellSize = 20; // 1 pixel = 1 birim
+    // const char *filename = "map.svg";
+    // const int gridSize = 200;
+    // const double cellSize = 20; // 1 pixel = 1 birim
+
+    appParams params;
+    loadParams("params/general_params.yaml", params);
+
+    const char *filename = params.map.map_file.c_str();
+    const int gridSize = params.grid.width; // assuming square grid
+    const double cellSize = params.grid.cell_size;
+    const int maxJumpCells = params.path_planning.max_jump_distance;
     
     // Grid oluştur
     gridMap map(gridSize);
@@ -146,10 +176,8 @@ int main()
         pathFinder.findPath(map, startCoord, endCoord);
     } else {
         std::cout << "Uyarı: Start veya End noktası SVG içinde (ID='A' veya ID='B') bulunamadı.\n";
-        // İstersen burada manuel bir koordinat da deneyebilirsin:
-        // findPath(map, coordinate{700, 3500}, coordinate{3091, 693});
     }
-
+    
     // Sonucu dosyaya yaz
     std::ofstream outfile("grid_output.txt");
     if (!outfile.is_open())
@@ -177,6 +205,13 @@ int main()
 
     pathFinder.printPath();
 
+    IsBlockedFn isBlocked = [&map](int x, int y) { return map.isBlocked(coordinate{x, y}); };
+    pathFinder.setPath(pathFinder.smoothPathLOS(pathFinder.getPath(), isBlocked , maxJumpCells));
+    pathFinder.updateMap(map);
+    
+    pathFinder.printPath();
+    pathFinder.generateCommands();
+    pathFinder.printDroneCommands();
     exportToSVG(map, "output.svg", cellSize);
 
     return 0;

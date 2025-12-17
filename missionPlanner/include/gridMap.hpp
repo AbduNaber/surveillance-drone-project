@@ -14,7 +14,8 @@ public:
     void setStart(const coordinate &c);
     void setEnd(const coordinate &c);
     void setPath(const coordinate &c);
-
+    void clear(const coordinate &c);
+    void clearPath();
     // Getters
     bool isBlocked(const coordinate &c) const;
     bool isStart(const coordinate &c) const;
