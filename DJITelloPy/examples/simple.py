@@ -5,16 +5,19 @@ tello = Tello()
 
 tello.connect()
 
-tello.takeoff()
+tello.streamon()
 
-tello.move_down(40)
-tello.move_up(30)
-tello.move_forward(100)
-tello.move_back(100)
-tello.rotate_clockwise(360)
-time.sleep(2)
 
-tello.land()
+# wait user push q don@t get v'deo I w'll hande
+while True:
+    if( input("Press q to quit: ") == 'q'):
+        break
+
+tello.streamoff()
+
+
+tello.end()
+
 
 
 

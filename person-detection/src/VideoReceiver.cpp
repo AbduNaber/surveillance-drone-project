@@ -3,11 +3,15 @@
 
 VideoReceiver::VideoReceiver(const std::string& uri)
 {
-    cap_.open(uri, cv::CAP_FFMPEG);
+
+    // Set a 5-second timeout (5,000,000 microseconds)
+    cap_.open(uri + "?timeout=5000000", cv::CAP_FFMPEG);
+    
     if (!cap_.isOpened()) {
         std::cerr << "[VideoReceiver] Failed to open stream: " << uri << "\n";
     }
 }
+
 
 bool VideoReceiver::isOpened() const
 {
@@ -17,5 +21,12 @@ bool VideoReceiver::isOpened() const
 bool VideoReceiver::grabFrame(cv::Mat& outFrame)
 {
     cap_ >> outFrame;
-    return !outFrame.empty();
+    std::cout << "[VideoReceiver] Grabbed a frame\n";
+    bool res = !outFrame.empty();
+    if (res == false) {
+        std::cerr << "[VideoReceiver] Failed to grab frame\n";
+       
+    }
+
+    return res;
 }

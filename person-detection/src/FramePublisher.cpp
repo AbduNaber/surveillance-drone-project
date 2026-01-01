@@ -13,4 +13,5 @@ void FramePublisher::sendFrame(const cv::Mat& frame)
     zmq::message_t msg(size);
     std::memcpy(msg.data(), frame.data, size);
     socket_.send(msg, zmq::send_flags::none);
+    std::cout << "[FramePublisher] Sent frame of size: " << size << " bytes\n";
 }
