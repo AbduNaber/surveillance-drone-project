@@ -19,6 +19,7 @@ bool gridMap::isBlocked(const coordinate &c) const
 {
     int x = c.x;
     int y = c.y;
+    
     if (isValid(x, y))
     {
         return grid_[y][x].blocked;
@@ -122,3 +123,28 @@ void gridMap::clearPath()
         }
     }
 }
+
+
+void gridMap::inflateObstacles(int radius) {
+    std::vector<coordinate> toBlock;
+
+    for (int y = 0; y < size_; ++y) {
+        for (int x = 0; x < size_; ++x) {
+            coordinate c{x, y};
+            if (!isBlocked(c)) continue;
+
+            for (int dy = -radius; dy <= radius; ++dy) {
+                for (int dx = -radius; dx <= radius; ++dx) {
+                    coordinate nb{x + dx, y + dy};
+                    if (isValid(nb.x, nb.y)) {
+                        toBlock.push_back(nb);
+                    }
+                }
+            }
+        }
+    }
+
+    for (auto &c : toBlock)
+        setBlocked(c);
+}
+

@@ -11,7 +11,10 @@
 #include <iostream>
 #include <algorithm>
 #include <map>
-
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <nlohmann/json.hpp>
 
 using IsBlockedFn = std::function<bool(int,int)>;
 
@@ -94,6 +97,7 @@ public:
     void buildDroneCommands( const std::vector<coordinate>& path, double initialYawRad );
     void updateMap(gridMap &map);
     void printDroneCommands();
+    int sendPathToUI();
 private:
 
     std::vector<coordinate> path = {};

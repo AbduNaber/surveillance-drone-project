@@ -3,12 +3,25 @@
 #include <vector>
 #include <string>
 #include <yaml-cpp/yaml.h>
+#include <iostream>
+#include <string>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <nlohmann/json.hpp>
+
+
+
 
 // Sadece Header dosyalarını include ediyoruz
 #include "gridMap.hpp"
 #include "gridMapContext.hpp"
 #include "pathFinder.hpp"
 #include "common.hpp"
+
+
+
+using json = nlohmann::json;
+
 
 void loadSvgToGrid(const char *filename, gridMap &map, double cellSize)
 {
@@ -119,7 +132,49 @@ void loadParams(const std::string &paramFile, appParams &params)
 
     params.path_planning.max_jump_distance = config["path_planning"]["max_jump_distance"].as<int>();
 }
+void getWaypointsFromUI(gridMap &map, coordinate &startCoord, coordinate &endCoord)
+{
+    // connect to UI with tcp sock.connect(("127.0.0.1", 5555)) get waypoints
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
 
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(5555);
+    std::cout << "Waiting for waypoints from UI on port 5555..." << std::endl;
+    bind(server_fd, (sockaddr*)&addr, sizeof(addr));
+    listen(server_fd, 1);
+
+    int client = accept(server_fd, nullptr, nullptr);
+
+    char buffer[4096] = {};
+    read(client, buffer, sizeof(buffer));
+
+    json data = json::parse(buffer);
+
+    for (auto& wp : data["waypoints"]) {
+        coordinate c;
+        c.x = wp["x"];
+        c.y = wp["y"];
+    
+
+        std::cout << "Waypoint received: ID=" << wp["id"] << " X=" << c.x << " Y=" << c.y << std::endl;
+        if (wp["id"] == "Blocked") {
+            map.setBlocked(c);
+        } else if (wp["id"] == "A") {
+            
+            memccpy(&startCoord, &c, sizeof(coordinate), sizeof(coordinate));
+            map.setStart(c);
+        } else if (wp["id"] == "B") {
+            memccpy(&endCoord, &c, sizeof(coordinate), sizeof(coordinate));
+            map.setEnd(c);
+        }
+        
+    }
+
+    close(client);
+    close(server_fd);
+}
 
 int main()
 {
@@ -131,7 +186,7 @@ int main()
     loadParams("params/general_params.yaml", params);
 
     const char *filename = params.map.map_file.c_str();
-    const int gridSize = params.grid.width; // assuming square grid
+    const int gridSize = params.grid.width; 
     const double cellSize = params.grid.cell_size;
     const int maxJumpCells = params.path_planning.max_jump_distance;
     
@@ -142,41 +197,26 @@ int main()
     loadSvgToGrid(filename, map, cellSize);
 
     std::cout << "Grid loaded from SVG." << std::endl;
+    coordinate startCoord{};
+    coordinate endCoord{};
 
-    // Haritayı tara ve Start (S) ve End (E) noktalarını bul
-    coordinate startCoord = {-1, -1};
-    coordinate endCoord = {-1, -1};
-    bool startFound = false;
-    bool endFound = false;
-
-    // Büyük haritalarda bu döngü maliyetli olabilir ama başlangıç için en güvenli yoldur
-    for (int y = 0; y < gridSize; ++y) {
-        for (int x = 0; x < gridSize; ++x) {
-            coordinate c{x, y};
-            if (map.isStart(c)) {
-                startCoord = c;
-                startFound = true;
-            } else if (map.isEnd(c)) {
-                endCoord = c;
-                endFound = true;
-            }
-            
-            if (startFound && endFound) break; 
-        }
-        if (startFound && endFound) break;
-    }
-
+    map.inflateObstacles(5); // Inflate obstacles by 5 cells   
     PathFinder pathFinder;
+ 
+    while (1){
 
+   
+    // UI'dan waypoint'leri al
+    getWaypointsFromUI(map, startCoord, endCoord);
+    std::cout << "Start Coord: (" << startCoord.x << ", " << startCoord.y << ")\n";
+    std::cout << "End Coord: (" << endCoord.x << ", " << endCoord.y << ")\n";
+    std::cout << "Grid Size: " << map.getSize() << std::endl;
+    
     // Eğer SVG'den start/end okuyabildiysek yolu bul
-    if (startFound && endFound) {
-        std::cout << "Start found at: (" << startCoord.x << ", " << startCoord.y << ")\n";
-        std::cout << "End found at: (" << endCoord.x << ", " << endCoord.y << ")\n";
-        
-        pathFinder.findPath(map, startCoord, endCoord);
-    } else {
-        std::cout << "Uyarı: Start veya End noktası SVG içinde (ID='A' veya ID='B') bulunamadı.\n";
-    }
+   
+    
+    pathFinder.findPath(map, startCoord, endCoord);
+   
     
     // Sonucu dosyaya yaz
     std::ofstream outfile("grid_output.txt");
@@ -214,5 +254,13 @@ int main()
     pathFinder.printDroneCommands();
     exportToSVG(map, "output.svg", cellSize);
 
+    if (pathFinder.sendPathToUI() != 0) {
+        std::cerr << "Failed to send path to UI." << std::endl;
+    } else {
+        std::cout << "Path sent to UI successfully." << std::endl;
+    }
+
+    map.clearPath();
+    }
     return 0;
 }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg
-   width="500cm"
-   height="500cm"
+   width="200cm"
+   height="200cm"
    viewBox="0 0 4000 4000"
    version="1.1"
    id="svg1"
@@ -35,6 +35,9 @@
        style="fill:#ff0000;stroke:#ff0000;stroke-width:20"
        d="M 155.12279,353.67998 2950.49,1751.24"
        id="wall1" />
+
+
+
+      
   </g>
 </svg>
-

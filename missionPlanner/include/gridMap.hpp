@@ -21,7 +21,7 @@ public:
     bool isStart(const coordinate &c) const;
     bool isEnd(const coordinate &c) const;
     bool isPath(const coordinate &c) const;
-    
+    void inflateObstacles(int radius);
     int getSize() const;
 
 private:

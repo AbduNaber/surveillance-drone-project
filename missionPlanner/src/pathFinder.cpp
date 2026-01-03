@@ -1,5 +1,7 @@
 #include "pathFinder.hpp"
 
+using json = nlohmann::json;
+
 static double normalizeAngle(double a) {
   while (a > M_PI)
     a -= 2 * M_PI;
@@ -15,7 +17,9 @@ void PathFinder::findPath(gridMap &map, coordinate start, coordinate end) {
 
   // If start or end are blocked, bail out
   if (map.isBlocked(start) || map.isBlocked(end)) {
-    std::cout << "[DEBUG] start or end is blocked\n";
+    
+    std::cout << "[DEBUG] start or end is blocked " << map.isBlocked(start)
+              << " " << map.isBlocked(end) << "\n";
     return;
   }
 
@@ -288,4 +292,41 @@ void PathFinder::printDroneCommands() {
       std::cout << "\n";
     }
   }
+}
+
+int PathFinder::sendPathToUI()
+{
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        perror("socket");
+        return -1;
+    }
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(5566);          // UI LISTENS here
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+
+    if (connect(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("connect");
+        close(sock);
+        return -1;
+    }
+
+    json payload;
+    payload["type"] = "path";
+    payload["path"] = json::array();
+
+    for (const auto& p : path) {
+        payload["path"].push_back({
+            {"x", p.x},
+            {"y", p.y}
+        });
+    }
+
+    std::string msg = payload.dump();
+    send(sock, msg.c_str(), msg.size(), 0);
+
+    close(sock);
+    return 0;
 }
