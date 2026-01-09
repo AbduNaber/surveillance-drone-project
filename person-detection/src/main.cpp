@@ -17,11 +17,12 @@ void signalHandler(int) {
 int main()
 {
     VideoStreamer app;
-    LocationTracker tracker("tcp://localhost:6000");
-    g_tracker = &tracker;
+    //LocationTracker tracker("tcp://localhost:6000");
+    //g_tracker = &tracker;
 
 
-    std::thread streamer_thread(&VideoStreamer::run, &app);
-    tracker.run();
+    //std::thread streamer_thread(&VideoStreamer::run, &app);
+    app.run();
+    //tracker.run();
     return 0;
 }

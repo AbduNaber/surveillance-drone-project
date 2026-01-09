@@ -6,7 +6,7 @@ from djitellopy import Tello
 # ================= ZMQ =================
 ctx = zmq.Context()
 pub = ctx.socket(zmq.PUB)
-pub.bind("tcp://*:6000")
+pub.bind("tcp://*:6001")
 
 # ================= TELLO =================
 tello = Tello()
@@ -19,7 +19,7 @@ running = True
 def telemetry_loop():
     print("[TELLO] Telemetry thread started")
     last = time.time()
-
+    
     while running:
         state = tello.get_current_state()
         now = time.time()
@@ -42,27 +42,17 @@ def telemetry_loop():
 
 # ================= COMMAND THREAD =================
 def command_sequence():
-    global running
 
-    print("[TELLO] Takeoff")
-    tello.takeoff()
+	tello.streamon()
 
-    time.sleep(1)
-    print("[TELLO] Forward 50cm")
-    tello.move_forward(400)
 
-    time.sleep(1)
-    print("[TELLO] Rotate")
-    tello.rotate_counter_clockwise(90)
-    time.sleep(1)
-    tello.move_forward(400)
-    time.sleep(1)
-    print("[TELLO] Land")
-    tello.land()
+	# wait user push q don@t get v'deo I w'll hande
+	while True:
+		if( input("Press q to quit: ") == 'q'):
+			break
 
-    running = False
-    tello.end()
-    print("[TELLO] Finished")
+	tello.streamoff()
+	
 
 # ================= START =================
 telemetry_thread = threading.Thread(target=telemetry_loop, daemon=True)

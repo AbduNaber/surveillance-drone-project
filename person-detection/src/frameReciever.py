@@ -15,7 +15,7 @@ class FrameReceiver:
         try:
             port = int(endpoint.split(":")[-1])
         except ValueError:
-            port = 5555
+            raise ValueError("Invalid endpoint format. Expected format like 'tcp://localhost:5555'")
 
         self.width = width
         self.height = height

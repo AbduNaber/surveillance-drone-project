@@ -1,0 +1,36 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 64 64"
+  width="128"
+  height="128"
+>
+  <!-- Map pin outline -->
+  <path
+    d="M32 2
+       C20.4 2 11 11.4 11 23
+       c0 14.3 21 39 21 39
+       s21-24.7 21-39
+       C53 11.4 43.6 2 32 2z"
+    fill="none"
+    stroke="black"
+    stroke-width="4"
+    stroke-linejoin="round"
+  />
+
+  <!-- Person head -->
+  <circle
+    cx="32"
+    cy="22"
+    r="5"
+    fill="black"
+  />
+
+  <!-- Person body -->
+  <path
+    d="M22 36
+       c0-6 20-6 20 0
+       v4
+       H22z"
+    fill="black"
+  />
+</svg>

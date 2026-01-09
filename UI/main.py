@@ -2,6 +2,8 @@ import sys
 import json
 import socket
 import threading
+import math
+import zmq
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QToolBar, QWidget,
@@ -19,6 +21,8 @@ from wifi_widget import WifiWidget
 class Mainwindow(QMainWindow):
     # ✅ Signal to safely move data from socket thread → Qt main thread
     path_received = pyqtSignal(list)
+    drone_update = pyqtSignal(float, float)
+    person_detected = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
@@ -40,15 +44,44 @@ class Mainwindow(QMainWindow):
         # Keep track of path line items so we can clear them cleanly
         self.path_items = []
 
+        # Keep track of detected persons: track_id -> QGraphicsSvgItem
+        self.person_items = {}
+
         self.setup_map()
         self.setup_top_toolbar()
         self.setup_main_toolbar()
 
         # ✅ connect signal to UI function (runs on Qt main thread)
         self.path_received.connect(self.on_path_received)
+        self.drone_update.connect(self.update_drone_position)
+        self.person_detected.connect(self.on_person_detected)
 
         # ✅ start TCP listener in background
         self.start_path_listener()
+        self.start_tello_listener()
+        self.start_person_listener()
+        
+        # ===== DRONE STATE =====
+        self.drone_x = 0.0
+        self.drone_y = 0.0
+        self.trajectory_initialized = False
+
+        # ===== DRONE ICON =====
+        # Using a distinct color for the drone on the map
+        self.drone_item_visual = self.scene.addEllipse(
+            -10, -10, 20, 20,
+            QPen(Qt.GlobalColor.blue),
+            QBrush(Qt.GlobalColor.blue)
+        )
+        self.drone_item_visual.setZValue(100) # High Z value to be on top
+
+        # ===== TRAJECTORY =====
+        self.trajectory_path = QPainterPath()
+        self.trajectory_item = self.scene.addPath(
+            self.trajectory_path,
+            QPen(Qt.GlobalColor.blue, 3)
+        )
+        self.trajectory_item.setZValue(90)
 
         self.statusBar().showMessage("Ready")
 
@@ -98,6 +131,9 @@ class Mainwindow(QMainWindow):
 
         find_way_btn = tb.addAction("Find Way")
         find_way_btn.triggered.connect(self.send_waypoints_to_mission_planner)
+
+        clear_pins_btn = tb.addAction("Clear Pins")
+        clear_pins_btn.triggered.connect(self.clear_persons)
 
     # ================= EVENTS =================
     def eventFilter(self, obj, event):
@@ -249,6 +285,168 @@ class Mainwindow(QMainWindow):
         for item in self.path_items:
             self.scene.removeItem(item)
         self.path_items.clear()
+
+    # ================= TELLO LISTENER =================
+    def start_tello_listener(self):
+        def listener():
+            print("[UI] ZMQ listener starting on tcp://127.0.0.1:6001")
+
+            ctx = zmq.Context()
+            sock = ctx.socket(zmq.SUB)
+            sock.connect("tcp://127.0.0.1:6001")
+            sock.setsockopt_string(zmq.SUBSCRIBE, "")
+
+            last_time = None 
+            print("[UI] Waiting for Tello state via ZMQ...")
+
+            while True:
+                try:
+                    msg = sock.recv_json()
+                except Exception as e:
+                    print(f"ZMQ Error: {e}")
+                    continue
+                
+                # Basic validation
+                if msg.get("type") != "tello_state":
+                    continue
+
+                now = time.time()
+                if last_time is None:
+                    last_time = now
+                    dt = 0.1 # default first step
+                else:
+                    dt = msg.get("dt", now - last_time)
+                
+                last_time = now
+
+                vgx = msg.get("vgx", 0)
+                vgy = msg.get("vgy", 0)
+                yaw_deg = msg.get("yaw", 0)
+
+                vx = vgx / 100.0
+                vy = vgy / 100.0
+                yaw = math.radians(yaw_deg)
+
+                wx = vx * math.cos(yaw) - vy * math.sin(yaw)
+                wy = vx * math.sin(yaw) + vy * math.cos(yaw)
+
+                self.drone_x += wx * dt
+                self.drone_y += wy * dt
+
+                self.drone_update.emit(self.drone_x, self.drone_y)
+                #print("state ok")
+
+        # Need to import time inside method or file level if not already
+        import time 
+        threading.Thread(target=listener, daemon=True).start()
+
+    # ================= PERSON LISTENER =================
+    def start_person_listener(self):
+        def listener():
+            print("[UI] Person listener starting on tcp://*:6000")
+            ctx = zmq.Context()
+            sock = ctx.socket(zmq.SUB)
+            try:
+                # User said "sends notify to tcp://*:6000", implying sender BINDS.
+                # So we CONNECT to localhost:6000.
+                sock.connect("tcp://127.0.0.1:6000")
+                sock.setsockopt_string(zmq.SUBSCRIBE, "")
+                
+                while True:
+                    try:
+                        msg = sock.recv_json()
+                        if msg.get("event") == "new_person":
+                            self.person_detected.emit(msg)
+                    except Exception as e:
+                        print(f"Person ZMQ Error: {e}")
+                        import time
+                        time.sleep(1) 
+            except Exception as e:
+                print(f"Could not connect to person stream: {e}")
+
+        threading.Thread(target=listener, daemon=True).start()
+
+    def on_person_detected(self, msg):
+        track_id = msg.get("track_id")
+        if track_id is None:
+            return
+
+        # Position: Use current drone position
+        pos = self.drone_item_visual.pos()
+        
+        if track_id in self.person_items:
+            # Update position
+            self.person_items[track_id].setPos(pos)
+        else:
+            # Create new pin
+            pin = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/person_icon.svg")
+            
+            # Optional: Scale pin if needed, e.g. pin.setScale(0.5)
+            # pin.setFlags(QGraphicsSvgItem.GraphicsItemFlag.ItemIgnoresTransformations)
+            
+            self.scene.addItem(pin)
+            pin.setPos(pos)
+            pin.setZValue(50) # Below drone, above map
+            
+            # Center alignment attempt (if SVG bounds known)
+            b = pin.boundingRect()
+            pin.setTransformOriginPoint(b.center())
+            
+            # Center the item on the position by offsetting
+            # pin.setPos(pos.x() - b.width()/2, pos.y() - b.height()/2)
+            # Note: setPos sets the origin. If we want center at pos, we shift.
+            # But setTransformOriginPoint is for rotation/scale.
+            # Let's adjust offset.
+            pin.setPos(pos.x() - b.width()/2, pos.y() - b.height()/2)
+            
+            self.person_items[track_id] = pin
+
+    def clear_persons(self):
+        for tid, item in self.person_items.items():
+            self.scene.removeItem(item)
+        self.person_items.clear()
+
+    # ================= UI UPDATE =================
+    def update_drone_position(self, x_m, y_m):
+        # Scale logic: Assuming x_m, y_m are in meters.
+        # Main map logic: 20 pixels = 1 unit? 
+        # self.cell_size = 20 # world units per cell?? No, comment says "world units per cell".
+        # Let's check grid_to_scene. 
+        # world_x = gx * cell_size
+        # Actually, let's look at scene_to_grid.
+        # The map seems to be purely visual with grid overlay.
+        # Let's try to just use a scaling factor similar to test.py but adapted to visibility.
+        # test.py used scale=1000.
+        # Here we have a map. Let's assume the drone starts at the center or 0,0 corresponds to a point.
+        # For now, I'll use a direct visual scale.
+        
+        scale = 100
+        
+        # In test.py: sy = -y_m * scale.
+        sx = x_m * scale
+        sy = -y_m * scale 
+
+        # We probably want to offset this to a starting position on the map if we knew it.
+        # For now, relative to (0,0) of the scene (top-left of map typically, but sceneRect might be adjusted).
+        # The map scene rect is set to bounds of svg.
+        # Let's assume start at center of map for visibility if 0,0 is top left.
+        
+        center_x = self.map_width_scene / 2
+        center_y = self.map_height_scene / 2
+        
+        final_x = center_x + sx
+        final_y = center_y + sy
+
+        self.drone_item_visual.setPos(final_x, final_y)
+
+        # Tracjectory
+        if not self.trajectory_initialized:
+            self.trajectory_path.moveTo(final_x, final_y)
+            self.trajectory_initialized = True
+        else:
+            self.trajectory_path.lineTo(final_x, final_y)
+
+        self.trajectory_item.setPath(self.trajectory_path)
 
 
 if __name__ == "__main__":
