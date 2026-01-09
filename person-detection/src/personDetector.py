@@ -9,23 +9,22 @@ class PersonDetector:
         results = self.model(
             frame,
             conf=self.conf_thresh,
-            classes=[0],  # person only
-            verbose=False
+            classes=[0],  # 0 is 'person' in COCO
+            verbose=False,
+            device=0,     # Ensure your GPU is available
+            half=True
         )
 
         detections = []
-
         for r in results:
             for box in r.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                # Get coordinates and confidence
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
                 conf = float(box.conf[0])
 
                 detections.append({
-                    "x1": x1,
-                    "y1": y1,
-                    "x2": x2,
-                    "y2": y2,
-                    "conf": conf
+                    "bbox": [x1, y1, x2, y2],
+                    "confidence": conf,
+                    "class": "person"
                 })
-
         return detections

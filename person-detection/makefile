@@ -23,7 +23,8 @@ SRCS := \
 	$(SRC_DIR)/main.cpp \
 	$(SRC_DIR)/VideoReceiver.cpp \
 	$(SRC_DIR)/FramePublisher.cpp \
-	$(SRC_DIR)/VideoStreamer.cpp
+	$(SRC_DIR)/VideoStreamer.cpp \
+	$(SRC_DIR)/locationTracker.cpp
 
 OBJS := $(SRCS:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 

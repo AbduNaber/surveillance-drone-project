@@ -3,7 +3,7 @@
 
 VideoStreamer::VideoStreamer()
     : receiver_("udp://@0.0.0.0:11111"),
-      publisher_("tcp://*:5555"),
+      publisher_("127.0.0.1", 5555),
       running_(true)
 {
 }
@@ -18,7 +18,7 @@ void VideoStreamer::run() {
     int continuous_errors = 0;
 
     while (running_) {
-        std::cout << "[Streamer] Grabbing frame..." << std::endl;
+        //std::cout << "[Streamer] Grabbing frame..." << std::endl;
         if (!receiver_.grabFrame(frame)) {
             continuous_errors++;
             // Don't log every single frame error, just wait for a valid I-frame

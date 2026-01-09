@@ -21,7 +21,7 @@ bool VideoReceiver::isOpened() const
 bool VideoReceiver::grabFrame(cv::Mat& outFrame)
 {
     cap_ >> outFrame;
-    std::cout << "[VideoReceiver] Grabbed a frame\n";
+    //std::cout << "[VideoReceiver] Grabbed a frame\n";
     bool res = !outFrame.empty();
     if (res == false) {
         std::cerr << "[VideoReceiver] Failed to grab frame\n";
