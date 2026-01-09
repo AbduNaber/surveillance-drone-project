@@ -5,11 +5,13 @@ grid:
 
 map:
   map_file: "map.svg"
+  resolution: 0.025 # meters per pixel
 
 path_planning:
-  max_jump_distance: 5
+  max_jump_distance: 10
 
 drone:
   speed: 5.0
   turn_rate: 30.0
   initial_yaw_rad: 0.0
+  dead_zone_deg: 5

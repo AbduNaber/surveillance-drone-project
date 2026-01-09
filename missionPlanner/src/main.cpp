@@ -8,9 +8,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <nlohmann/json.hpp>
-
-
-
+#include <zmq.hpp>
 
 // Sadece Header dosyalarını include ediyoruz
 #include "gridMap.hpp"
@@ -22,6 +20,7 @@
 
 using json = nlohmann::json;
 
+appParams params;
 
 void loadSvgToGrid(const char *filename, gridMap &map, double cellSize)
 {
@@ -129,8 +128,14 @@ void loadParams(const std::string &paramFile, appParams &params)
     params.grid.cell_size = config["grid"]["cell_size"].as<double>();
 
     params.map.map_file = config["map"]["map_file"].as<std::string>(); 
+    params.map.resolution = config["map"]["resolution"].as<double>();
 
     params.path_planning.max_jump_distance = config["path_planning"]["max_jump_distance"].as<int>();
+    params.drone.speed = config["drone"]["speed"].as<double>();
+    params.drone.turn_rate = config["drone"]["turn_rate"].as<double>();
+    params.drone.initial_yaw_rad = config["drone"]["initial_yaw_rad"].as<double>();
+    params.drone.dead_zone_deg = config["drone"]["dead_zone_deg"].as<double>(); 
+    
 }
 void getWaypointsFromUI(gridMap &map, coordinate &startCoord, coordinate &endCoord)
 {
@@ -176,13 +181,61 @@ void getWaypointsFromUI(gridMap &map, coordinate &startCoord, coordinate &endCoo
     close(server_fd);
 }
 
+void sendCommandsToTello(const std::vector<std::map<DroneCommand, std::string>>& commands)
+{
+    // Implementation for sending commands to Tello drone with TCP
+    // open tcp socket to 5588 port and send commands
+    
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(5588);
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+
+    connect(sock, (sockaddr*)&addr, sizeof(addr));  // 🔒 BLOCKS
+
+
+
+    // send as JSON
+    json payload;
+    payload["type"] = "commands";
+    payload["commands"] = json::array();
+    for (const auto& cmdMap : commands) {
+        json cmdJson;
+        for (const auto& pair : cmdMap) {
+            DroneCommand cmd = pair.first;
+            const std::string &value = pair.second;
+            cmdJson["command"] = cmd;
+            cmdJson["value"] = value;
+        }
+        payload["commands"].push_back(cmdJson);
+    }
+
+
+
+    std::string jsonStr = payload.dump();
+
+    send(sock, jsonStr.c_str(), jsonStr.size(), 0);
+
+    char ack[16];
+    recv(sock, ack, sizeof(ack), 0);  // wait for "OK"
+
+    close(sock);
+
+    std::cout << jsonStr << std::endl;
+    std::cout << "Commands sent to Tello drone." << std::endl;
+
+
+}
+
 int main()
 {
     // const char *filename = "map.svg";
     // const int gridSize = 200;
     // const double cellSize = 20; // 1 pixel = 1 birim
 
-    appParams params;
+    
     loadParams("params/general_params.yaml", params);
 
     const char *filename = params.map.map_file.c_str();
@@ -226,21 +279,21 @@ int main()
         return 1;
     }
 
-    for (int y = 0; y < gridSize; ++y)
-    {
-        for (int x = 0; x < gridSize; ++x)
-        {
-            coordinate coord{ x, y };
-            if (map.isPath(coord))       outfile << "+"; // Yol en üstte görünsün
-            else if (map.isStart(coord)) outfile << "S";
-            else if (map.isEnd(coord))   outfile << "E";
-            else if (map.isBlocked(coord)) outfile << "#";
-            else outfile << ".";
-        }
-        outfile << '\n';
-    }
-    outfile.close();
-    std::cout << "Grid output written to grid_output.txt" << std::endl;
+    // for (int y = 0; y < gridSize; ++y)
+    // {
+    //     for (int x = 0; x < gridSize; ++x)
+    //     {
+    //         coordinate coord{ x, y };
+    //         if (map.isPath(coord))       outfile << "+"; // Yol en üstte görünsün
+    //         else if (map.isStart(coord)) outfile << "S";
+    //         else if (map.isEnd(coord))   outfile << "E";
+    //         else if (map.isBlocked(coord)) outfile << "#";
+    //         else outfile << ".";
+    //     }
+    //     outfile << '\n';
+    // }
+    // outfile.close();
+    // std::cout << "Grid output written to grid_output.txt" << std::endl;
 
 
     pathFinder.printPath();
@@ -249,8 +302,8 @@ int main()
     pathFinder.setPath(pathFinder.smoothPathLOS(pathFinder.getPath(), isBlocked , maxJumpCells));
     pathFinder.updateMap(map);
     
-    pathFinder.printPath();
-    pathFinder.generateCommands();
+    //pathFinder.printPath();
+    pathFinder.generateCommands(params);
     pathFinder.printDroneCommands();
     exportToSVG(map, "output.svg", cellSize);
 
@@ -259,6 +312,7 @@ int main()
     } else {
         std::cout << "Path sent to UI successfully." << std::endl;
     }
+    sendCommandsToTello(pathFinder.getDroneCommands());
 
     map.clearPath();
     }

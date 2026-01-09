@@ -55,22 +55,11 @@ typedef enum {
     // Hover / stop
     CMD_STOP,
 
-    // Advanced point-to-point movement
-    CMD_GO_XYZ_SPEED,
-    CMD_CURVE_X1Y1Z1_X2Y2Z2_SPEED,
-    CMD_JUMP_XYZ_SPEED_YAW_MID,
-
     // Flip maneuvers
     CMD_FLIP_LEFT,
     CMD_FLIP_RIGHT,
     CMD_FLIP_FORWARD,
     CMD_FLIP_BACK,
-
-    // Raw velocity control (RC)
-    CMD_RC_CONTROL,
-
-    // Camera control
-    CMD_SET_VIDEO_DIRECTION,
 
     // Speed settings
     CMD_SET_SPEED,
@@ -86,15 +75,15 @@ public:
 
     void findPath(gridMap &map, coordinate start, coordinate end);
     std::vector<coordinate>& getPath() { return path; }
-
+    std::vector<std::map<DroneCommand, std::string>>& getDroneCommands() { return drone_commands; }
     void printPath();
-    void generateCommands(); 
+    void generateCommands( appParams &params ); 
     std::vector<coordinate> smoothPathLOS(const std::vector<coordinate>& path,const IsBlockedFn& isBlocked , int maxJumpCells);
     bool lineFree(const coordinate& a, const coordinate& b, const IsBlockedFn& isBlocked);
         
     // for debug porpose delete it
     void setPath(const std::vector<coordinate>& newPath) { path = newPath; }
-    void buildDroneCommands( const std::vector<coordinate>& path, double initialYawRad );
+    void buildDroneCommands( const appParams &params, const std::vector<coordinate>& path, double initialYawRad );
     void updateMap(gridMap &map);
     void printDroneCommands();
     int sendPathToUI();
@@ -109,6 +98,12 @@ private:
         double dx = double(a.x - b.x);
         double dy = double(a.y - b.y);
         return std::sqrt(dx * dx + dy * dy);
+    }
+
+    double normalizeAngle(double a) {
+        while (a > M_PI) a -= 2*M_PI;
+        while (a < -M_PI) a += 2*M_PI;
+        return a;
     }
 
 };

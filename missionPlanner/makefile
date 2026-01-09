@@ -3,7 +3,7 @@ CXX = g++
 # -Iinclude: Derleyicinin header dosyalarını 'include' klasöründe aramasını sağlar
 # -O3: Yüksek optimizasyon (büyük haritalar için gerekli)
 CXXFLAGS = -std=c++17 -Wall -O3 -Iinclude 
-LDFLAGS = -lyaml-cpp
+LDFLAGS = -lyaml-cpp -lzmq
 
 # Executable name
 TARGET = grid_map

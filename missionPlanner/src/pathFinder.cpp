@@ -153,9 +153,9 @@ void PathFinder::printPath() {
   }
 }
 
-void PathFinder::generateCommands() {
+void PathFinder::generateCommands(appParams &params) {
   drone_commands.clear();
-  buildDroneCommands(path, 0.0);
+  buildDroneCommands(params,path, 0.0);
 }
 
 // it uses Bresenham's line algorithm for that
@@ -233,7 +233,7 @@ void PathFinder::updateMap(gridMap &map) {
   }
 }
 
-void PathFinder::buildDroneCommands(const std::vector<coordinate> &path,
+void PathFinder::buildDroneCommands(const appParams &params, const std::vector<coordinate> &path,
                                     double initialYawRad ) {
   std::vector<std::map<DroneCommand, std::string>> commands;
 
@@ -247,27 +247,28 @@ void PathFinder::buildDroneCommands(const std::vector<coordinate> &path,
     double dx = path[i + 1].x - path[i].x;
     double dy = path[i + 1].y - path[i].y;
 
-    double distM = std::hypot(dx, dy);
+    double distM = std::hypot(dx, dy) * params.map.resolution;
     int forwardCm = static_cast<int>(std::lround(distM * 100.0));
 
-    if (forwardCm < 20)
-      continue; // ignore tiny moves
 
     double targetYaw = std::atan2(dy, dx);
     double deltaYaw = normalizeAngle(targetYaw - currentYaw);
     int turnDeg = static_cast<int>(std::lround(deltaYaw * 180.0 / M_PI));
 
     // ---- Rotation ----
-    if (std::abs(turnDeg) >= 5) {
-      if (turnDeg > 0) {
+    if (turnDeg > params.drone.dead_zone_deg || turnDeg < -params.drone.dead_zone_deg){ 
+        if (turnDeg > 0) {
         commands.push_back(
             std::map<DroneCommand, std::string>{{CMD_ROTATE_CCW, std::to_string(turnDeg)}});
-      } else {
+      } else if (turnDeg < 0) {
         commands.push_back(
             std::map<DroneCommand, std::string>{{CMD_ROTATE_CW, std::to_string(-turnDeg)}});    
       }
       currentYaw = targetYaw;
-    }
+    }  
+    
+    
+    
 
     // ---- Forward ----
     commands.push_back(
@@ -276,6 +277,7 @@ void PathFinder::buildDroneCommands(const std::vector<coordinate> &path,
 
   drone_commands = std::move(commands);
 }
+
 
 
 

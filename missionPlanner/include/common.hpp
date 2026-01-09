@@ -32,10 +32,19 @@ struct appParams
     struct MapParams
     {
         std::string map_file;
+        double resolution; // meters per pixel
     } map;
 
     struct PathPlanningParams
     {
         int max_jump_distance;
     } path_planning;
+
+    struct DroneParams
+    {
+        double speed;        // meters per second
+        double turn_rate;    // degrees per second
+        double initial_yaw_rad; // initial yaw in radians
+        double dead_zone_deg;   // degrees
+    } drone;
 };
