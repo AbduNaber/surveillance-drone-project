@@ -1,4 +1,8 @@
 *.bin
 obj/
 *.o
-grid_map
+grid_map/
+person-detection/lib/
+person-detection/bin/
+person-detection/venv/
+
