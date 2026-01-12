@@ -94,6 +94,114 @@ def telemetry_loop():
         pub.send_json(msg)
         time.sleep(0.05)   # 20 Hz
 
+# ================= PERMISSION HELPER =================
+def handle_rotation_with_permission(cmd_enum, initial_value):
+    UI_HOST = "127.0.0.1"
+    UI_PORT = 5590
+    
+    direction = "CW" if cmd_enum == TelloCommand.ROTATE_CW else "CCW"
+    
+    print(f"[TELLO CMD] Requesting permission for rotation: {direction} {initial_value}")
+    
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((UI_HOST, UI_PORT))
+        
+        # Send initial request
+        req = {
+            "type": "rotate_request",
+            "cmd": direction,
+            "value": initial_value
+        }
+        sock.sendall(json.dumps(req).encode('utf-8'))
+        
+        buffer = ""
+        decoder = json.JSONDecoder()
+        permission_granted = False # ONLY True if "done" received
+
+        # Loop for interaction
+        while True:
+            try:
+                data = sock.recv(4096)
+            except socket.error as e:
+                print(f"[TELLO CMD] Socket error during permission: {e}")
+                break
+                
+            if not data:
+                print("[TELLO CMD] UI disconnected during permission.")
+                break
+            
+            buffer += data.decode('utf-8')
+            
+            while buffer:
+                buffer = buffer.lstrip()
+                if not buffer:
+                    break
+                
+                try:
+                    msg, idx = decoder.raw_decode(buffer)
+                    buffer = buffer[idx:]
+                except ValueError:
+                    # Incomplete JSON
+                    break
+                
+                action = msg.get("action")
+                print(f"[TELLO CMD] Permission Msg: {action}")
+
+                if action == "done":
+                    print("[TELLO CMD] Rotation permission verified. Proceeding.")
+                    permission_granted = True
+                    sock.close()
+                    return True
+                
+                elif action == "land":
+                    print("[TELLO CMD] Use requested LAND. Aborting mission.")
+                    try:
+                        tello.land()
+                        sock.sendall(b"ACK")
+                    except Exception as e:
+                        print(f"[TELLO CMD] Land error: {e}")
+                    sock.close()
+                    return False
+
+                elif action == "rotate":
+                    rot_dir = msg.get("direction", "CW")
+                    rot_val = int(msg.get("value", 0))
+                    print(f"[TELLO CMD] Performing interactive rotation: {rot_dir} {rot_val}")
+                    
+                    try:
+                        if rot_dir == "CW":
+                            tello.rotate_clockwise(rot_val)
+                        else:
+                            tello.rotate_counter_clockwise(rot_val)
+                        
+                        sock.sendall(b"ACK")
+                    except Exception as e:
+                        print(f"[TELLO CMD] Rotation error: {e}")
+                        sock.sendall(b"ERR")
+        
+        sock.close()
+        
+        pass # Loop finished without 'done' or 'land' -> Disconnect
+        
+        # If we reached here, the loop finished. 
+        # This means connection was made but dropped before "done" or "land".
+        # We should ABORT for safety.
+        print("[TELLO CMD] Permission dialog disconnected unexpectedly. Aborting.")
+        return False
+        
+    except Exception as e:
+        print(f"[TELLO CMD] Failed to connect to UI for permission: {e}")
+        # Connect failed entirely -> Fallback to execution (Headless mode)
+        print("[TELLO CMD] Fallback: Executing original rotation without permission.")
+        if cmd_enum == TelloCommand.ROTATE_CW:
+            tello.rotate_clockwise(initial_value)
+        else:
+            tello.rotate_counter_clockwise(initial_value)
+            
+        return True
+
+
 # ================= COMMAND THREAD =================
 def command_sequence():
     global running
@@ -104,6 +212,7 @@ def command_sequence():
         print(f"[TELLO] Failed to start stream: {e}")
 
     time.sleep(2)
+
 
     HOST = "127.0.0.1"
     PORT = 5588
@@ -216,9 +325,15 @@ def command_sequence():
                         elif command.command == TelloCommand.BACKWARD:
                             tello.move_back(command.value)
                         elif command.command == TelloCommand.ROTATE_CW:
-                            tello.rotate_clockwise(command.value)
+                            if not handle_rotation_with_permission(command.command, command.value):
+                                print("[TELLO CMD] Mission aborted by user.")
+                                success = False
+                                break
                         elif command.command == TelloCommand.ROTATE_CCW:
-                            tello.rotate_counter_clockwise(command.value)
+                             if not handle_rotation_with_permission(command.command, command.value):
+                                print("[TELLO CMD] Mission aborted by user.")
+                                success = False
+                                break
                         elif command.command == TelloCommand.STOP:
                             tello.send_rc_control(0, 0, 0, 0)
                         elif command.command == TelloCommand.FLIP_LEFT:

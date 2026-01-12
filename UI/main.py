@@ -11,15 +11,157 @@ import time
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QToolBar, QWidget,
     QSizePolicy, QGraphicsView, QGraphicsScene,
-    QGraphicsPathItem, QMessageBox,QDockWidget,QTextEdit
+    QGraphicsPathItem, QMessageBox, QDockWidget, QTextEdit,
+    QDialog, QVBoxLayout, QLabel, QSpinBox, QPushButton, QHBoxLayout,
+    QSlider
 )
 from PyQt6.QtGui import QPainter, QPen, QBrush, QPainterPath
-from PyQt6.QtCore import Qt, QEvent, pyqtSignal,QObject
+from PyQt6.QtCore import Qt, QEvent, pyqtSignal, QObject, pyqtSlot
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 
 from battery_widget import BatteryWidget
 from wifi_widget import WifiWidget
 from PyQt6.QtGui import QAction
+
+class RotationControlDialog(QDialog):
+    def __init__(self, parent, socket_conn, direction, initial_value):
+        super().__init__(parent)
+        self.setWindowTitle("Rotation Permission Request")
+        self.socket_conn = socket_conn
+        self.direction = direction # "CW" or "CCW"
+        self.setModal(True)
+        self.resize(300, 200)
+
+        layout = QVBoxLayout()
+
+        self.info_label = QLabel(f"Drone wants to rotate {direction} by {initial_value} degrees.")
+        self.info_label.setWordWrap(True)
+        layout.addWidget(self.info_label)
+
+        # Input for value
+        hbox_val = QHBoxLayout()
+        hbox_val.addWidget(QLabel("Angle:"))
+        self.spin_val = QSpinBox()
+        self.spin_val.setRange(1, 360)
+        self.spin_val.setValue(int(initial_value))
+        hbox_val.addWidget(self.spin_val)
+        layout.addLayout(hbox_val)
+
+        # Action Buttons
+        btn_layout = QHBoxLayout()
+        
+        self.btn_cw = QPushButton("Turn CW")
+        self.btn_cw.clicked.connect(lambda: self.send_action("CW"))
+        
+        self.btn_ccw = QPushButton("Turn CCW")
+        self.btn_ccw.clicked.connect(lambda: self.send_action("CCW"))
+
+        btn_layout.addWidget(self.btn_cw)
+        btn_layout.addWidget(self.btn_ccw)
+        layout.addLayout(btn_layout)
+
+        # Done Button
+        self.btn_done = QPushButton("OK / Next Command")
+        self.btn_done.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;")
+        self.btn_done.clicked.connect(self.finish_interaction)
+        layout.addWidget(self.btn_done)
+
+        # Cancel/Land Button
+        self.btn_cancel = QPushButton("Cancel Flight (LAND)")
+        self.btn_cancel.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;")
+        self.btn_cancel.clicked.connect(self.cancel_flight)
+        layout.addWidget(self.btn_cancel)
+
+        self.setLayout(layout)
+
+    def send_action(self, direction):
+        val = self.spin_val.value()
+        msg = {"action": "rotate", "direction": direction, "value": val}
+        
+        # PREDICTIVE UPDATE (Dead Reckoning)
+        try:
+            if self.parent():
+                step = val if direction == "CW" else -val
+                self.parent().apply_rotation(step)
+        except Exception as e:
+            print(f"Predicitive rotation error: {e}")
+
+        try:
+            # Disable buttons while rotating
+            self.set_buttons_enabled(False)
+            self.repaint() # Force UI update
+            
+            self.socket_conn.sendall(json.dumps(msg).encode('utf-8'))
+            
+            # Wait for ACK/Completed from driver
+            self.socket_conn.settimeout(10.0) 
+            resp = self.socket_conn.recv(1024)
+            print(f"[UI] Rotation ack: {resp}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Communication error: {e}")
+        finally:
+            self.set_buttons_enabled(True)
+
+    def finish_interaction(self):
+        msg = {"action": "done"}
+        try:
+            self.socket_conn.sendall(json.dumps(msg).encode('utf-8'))
+        except Exception as e:
+            print(f"Error sending done: {e}")
+        self.accept()
+
+    def cancel_flight(self):
+        msg = {"action": "land"}
+        try:
+            self.socket_conn.sendall(json.dumps(msg).encode('utf-8'))
+        except Exception as e:
+            print(f"Error sending land: {e}")
+        self.reject() # Close dialog with reject code
+
+    def set_buttons_enabled(self, enabled):
+        self.btn_cw.setEnabled(enabled)
+        self.btn_ccw.setEnabled(enabled)
+        self.btn_done.setEnabled(enabled)
+        self.btn_cancel.setEnabled(enabled)
+
+
+class PermissionServer(QObject):
+    request_received = pyqtSignal(object, dict) # socket, data
+
+    def __init__(self, port=5590):
+        super().__init__()
+        self.port = port
+        self.running = True
+
+    def start(self):
+        threading.Thread(target=self._server_loop, daemon=True).start()
+
+    def _server_loop(self):
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("127.0.0.1", self.port))
+        server.listen(1)
+        print(f"[UI] Permission Server listening on {self.port}")
+
+        while self.running:
+            try:
+                conn, addr = server.accept()
+                # Read the initial request
+                data = conn.recv(4096)
+                if not data:
+                    conn.close()
+                    continue
+                
+                try:
+                    req = json.loads(data.decode('utf-8'))
+                    self.request_received.emit(conn, req)
+                except Exception as e:
+                    print(f"Invalid permission request: {e}")
+                    conn.close()
+
+            except Exception as e:
+                print(f"Permission server error: {e}")
 
 class LogStream(QObject):
     """
@@ -78,6 +220,7 @@ class Mainwindow(QMainWindow):
 
         self.setup_map()
         self.setup_log_dock()
+        self.setup_yaw_slider()
         self.setup_top_toolbar()
         self.setup_main_toolbar()
 
@@ -92,10 +235,16 @@ class Mainwindow(QMainWindow):
         self.start_tello_listener()
         self.start_person_listener()
         
+        # ✅ Start Permission Server
+        self.perm_server = PermissionServer()
+        self.perm_server.request_received.connect(self.handle_permission_request)
+        self.perm_server.start()
+        
         # ===== DRONE STATE =====
         self.drone_x = 0.0
         self.drone_y = 0.0
-        self.drone_scale = 10000  # pixels per meter (approx)
+        self.drone_yaw = 0.0 # Degrees
+        self.drone_scale = 20000  # pixels per meter (approx)
         self.trajectory_initialized = False
         self.low_battery_warned = False
 
@@ -158,6 +307,36 @@ class Mainwindow(QMainWindow):
         
         sys.stdout = self.log_stream
         sys.stderr = self.log_stream
+
+    def setup_yaw_slider(self):
+        # Create Dock
+        self.yaw_dock = QDockWidget("Yaw Calibration", self)
+        self.yaw_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea)
+        
+        # Widget container
+        container = QWidget()
+        layout = QVBoxLayout()
+        
+        # Label
+        self.yaw_label = QLabel("Drone Angle: 0°")
+        layout.addWidget(self.yaw_label)
+        
+        # Slider
+        self.yaw_slider = QSlider(Qt.Orientation.Horizontal)
+        self.yaw_slider.setRange(0, 360)
+        self.yaw_slider.setValue(0)
+        self.yaw_slider.valueChanged.connect(self.on_yaw_slider_change)
+        layout.addWidget(self.yaw_slider)
+        
+        container.setLayout(layout)
+        self.yaw_dock.setWidget(container)
+        
+        # Add to Bottom Right (Right area)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.yaw_dock)
+
+    def on_yaw_slider_change(self, value):
+        self.yaw_label.setText(f"Drone Angle: {value}°")
+        self.set_drone_yaw(value)
 
     def append_log(self, text):
         # İmleci sona taşı ve metni ekle
@@ -228,7 +407,7 @@ class Mainwindow(QMainWindow):
         tb.addAction(start_mission_act)
 
         # (Mevcut Find Way butonunu burada koruduk)
-        find_way_btn = tb.addAction("Find Way")
+        find_way_btn = tb.addAction("Start Flight")
         find_way_btn.triggered.connect(self.send_waypoints_to_mission_planner)
 
         tb.addSeparator()
@@ -660,7 +839,50 @@ class Mainwindow(QMainWindow):
         elif level >= 20:
              self.low_battery_warned = False
 
+    # ================= PERMISSION REQUEST =================
+    @pyqtSlot(object, dict)
+    def handle_permission_request(self, conn, data):
+        # Retrieve info from data
+        direction = data.get("cmd", "CW")
+        value = data.get("value", 90)
+        
+        # Open Dialog
+        dialog = RotationControlDialog(self, conn, direction, value)
+        dialog.exec()
+        
+        # Close connection after dialog finishes (dialog sends 'done' before closing)
+        try:
+            conn.close()
+        except:
+            pass
+
     # ================= UI UPDATE =================
+    def apply_rotation(self, delta_deg):
+        """
+        Manually updates the drone's rotation (Dead Reckoning).
+        This is called by the permission dialog to simulate rotation immediately.
+        """
+        self.drone_yaw += delta_deg
+        # Optimize or Normalize? Tello uses degrees.
+        # self.drone_yaw %= 360 # Optional
+        
+        if self.drone_item_visual:
+            self.drone_item_visual.setRotation(self.drone_yaw)
+        
+        # Sync slider if exists
+        if hasattr(self, "yaw_slider"):
+            self.yaw_slider.blockSignals(True)
+            self.yaw_slider.setValue(int(self.drone_yaw % 360))
+            self.yaw_slider.blockSignals(False)
+
+    def set_drone_yaw(self, angle):
+        """
+        Sets the absolute rotation of the drone (Calibration).
+        """
+        self.drone_yaw = angle
+        if self.drone_item_visual:
+            self.drone_item_visual.setRotation(self.drone_yaw)
+            
     def update_drone_position(self, x_m, y_m):
         # Scale logic: Assuming x_m, y_m are in meters.
         # Main map logic: 20 pixels = 1 unit? 

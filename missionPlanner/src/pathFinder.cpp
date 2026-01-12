@@ -236,7 +236,10 @@ void PathFinder::updateMap(gridMap &map) {
 void PathFinder::buildDroneCommands(const appParams &params, const std::vector<coordinate> &path,
                                     double initialYawRad ) {
   std::vector<std::map<DroneCommand, std::string>> commands;
-
+  commands.clear();
+  commands.push_back(
+      std::map<DroneCommand, std::string>{{CMD_SET_SPEED,
+                                         std::to_string(static_cast<int>(params.drone.speed))}});
   // Helper lambda to push or merge commands
   auto pushOrMerge = [&](DroneCommand cmd, int value) {
       if (commands.empty()) {
