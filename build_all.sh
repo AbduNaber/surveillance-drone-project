@@ -88,7 +88,7 @@ for arg in "$@"; do
             build_tello_driver
             build_mission_planner
             build_video_streamer
-            build_yolo_worker
+            
             ;;
         *)
             echo "Error: Unknown argument '$arg'"

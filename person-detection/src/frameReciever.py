@@ -1,47 +1,29 @@
-import socket
-import struct
+import zmq
 import cv2
 import numpy as np
 
 
 class FrameReceiver:
-    def __init__(self, endpoint, width, height, channels=3,
-                 mcast_group="239.255.0.1"):
-        try:
-            port = int(endpoint.split(":")[-1])
-        except ValueError:
-            raise ValueError("Invalid endpoint format. Expected 'tcp://localhost:5555'")
-
+    def __init__(self, endpoint="tcp://127.0.0.1:5577", width=960, height=720):
+         # endpoint is now a ZMQ connection string like "tcp://127.0.0.1:5577"
         self.width = width
         self.height = height
-        self.channels = channels
-        self.mcast_group = mcast_group
-        self.port = port
+        self.endpoint = endpoint
 
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        self.ctx = zmq.Context()
+        self.sock = self.ctx.socket(zmq.SUB)
+        self.sock.connect(self.endpoint)
+        self.sock.setsockopt_string(zmq.SUBSCRIBE, "")
 
-        # Allow multiple receivers
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Optional: Conflate to always get latest frame if processing is slow
+        self.sock.setsockopt(zmq.CONFLATE, 1)
 
-        # Increase buffer size
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
-
-        # ✅ Correct bind (all interfaces)
-        self.sock.bind(("", self.port))
-
-        # ✅ Join multicast group
-        mreq = struct.pack(
-            "4sl",
-            socket.inet_aton(self.mcast_group),
-            socket.INADDR_ANY
-        )
-        self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-
-        print(f"[FrameReceiver] Listening on {self.mcast_group}:{self.port}")
+        print(f"[FrameReceiver] Subscribed to {self.endpoint}")
 
     def receive(self):
         try:
-            packet, _ = self.sock.recvfrom(65536)
+            # Blocking receive, or use NOBLOCK if needed
+            packet = self.sock.recv()
 
             frame_array = np.frombuffer(packet, dtype=np.uint8)
             frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
@@ -54,3 +36,4 @@ class FrameReceiver:
 
     def close(self):
         self.sock.close()
+        self.ctx.term()

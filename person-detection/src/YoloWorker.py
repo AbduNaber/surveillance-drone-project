@@ -25,7 +25,7 @@ class Notifier:
 
 class YoloWorker:
     def __init__(self):
-        self.receiver = FrameReceiver(endpoint="udp://239.255.0.1:5577", width=960, height=720)
+        self.receiver = FrameReceiver()
         self.detector = PersonDetector()
         self.visualizer = Visualizer()
         self.notifier = Notifier()

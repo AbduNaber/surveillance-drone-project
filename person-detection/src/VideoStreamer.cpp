@@ -3,7 +3,7 @@
 
 VideoStreamer::VideoStreamer()
     : receiver_("udp://@0.0.0.0:11111"),
-      publisher_("239.255.0.1", 5577),
+      publisher_("tcp://*:5577"),
       running_(true)
 {
 }

@@ -1,30 +1,50 @@
+
 import cv2
 import sys
-import signal
+import zmq
+import numpy as np
 
-UDP_URL = "udp://239.255.0.1:5577"
+# ZMQ Endpoint
+ZMQ_URL = "tcp://127.0.0.1:5577"
 
 def main():
-    cap = cv2.VideoCapture(UDP_URL)
+    print(f"[Camera] Connecting to {ZMQ_URL}")
+    
+    ctx = zmq.Context()
+    sock = ctx.socket(zmq.SUB)
+    sock.connect(ZMQ_URL)
+    sock.setsockopt_string(zmq.SUBSCRIBE, "")
+    # Conflate to prevent lag if UI is slow
+    sock.setsockopt(zmq.CONFLATE, 1)
 
-    if not cap.isOpened():
-        print("[Camera] Failed to open stream")
-        return
-
-    print("[Camera] Stream opened")
+    print("[Camera] Stream opened (ZMQ)")
 
     while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("[Camera] Stream timeout")
+        try:
+            # Check for window close event (handled by cv2.waitKey)
+            
+            packet = sock.recv()
+            if len(packet) == 0:
+                continue
+
+            frame_array = np.frombuffer(packet, dtype=np.uint8)
+            frame = cv2.imdecode(frame_array, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                continue
+
+            cv2.imshow("Drone Camera", frame)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        except Exception as e:
+            print(f"[Camera] Error: {e}")
+            break
+        except KeyboardInterrupt:
             break
 
-        cv2.imshow("Drone Camera", frame)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
+    sock.close()
+    ctx.term()
     cv2.destroyAllWindows()
     print("[Camera] Stream closed")
 

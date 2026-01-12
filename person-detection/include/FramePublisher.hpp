@@ -1,16 +1,14 @@
 #include <opencv2/opencv.hpp>
 #include <string>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include <zmq.hpp>
 
 class FramePublisher {
 public:
-    FramePublisher(const std::string& destination_ip, int port);
+    FramePublisher(const std::string& endpoint);
     ~FramePublisher();
     void sendFrame(const cv::Mat& frame);
 
 private:
-    int sockfd_;
-    struct sockaddr_in dest_addr_;
+    zmq::context_t context_;
+    zmq::socket_t publisher_;
 };
