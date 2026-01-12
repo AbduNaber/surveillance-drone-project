@@ -237,6 +237,58 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
                                     double initialYawRad ) {
   std::vector<std::map<DroneCommand, std::string>> commands;
 
+  // Helper lambda to push or merge commands
+  auto pushOrMerge = [&](DroneCommand cmd, int value) {
+      if (commands.empty()) {
+          commands.push_back(std::map<DroneCommand, std::string>{{cmd, std::to_string(value)}});
+          return;
+      }
+
+      // Check last command
+      auto &lastMap = commands.back();
+      if (lastMap.empty()) { // Should not happen but safety check
+           commands.push_back(std::map<DroneCommand, std::string>{{cmd, std::to_string(value)}});
+           return;
+      }
+      
+      auto it = lastMap.begin();
+      DroneCommand lastCmd = it->first;
+      
+      // If same command and mergeable
+      if (lastCmd == cmd) {
+          bool mergeable = false;
+          switch (cmd) {
+              case CMD_MOVE_UP:
+              case CMD_MOVE_DOWN:
+              case CMD_MOVE_LEFT:
+              case CMD_MOVE_RIGHT:
+              case CMD_MOVE_FORWARD:
+              case CMD_MOVE_BACK:
+              case CMD_ROTATE_CW:
+              case CMD_ROTATE_CCW:
+                  mergeable = true;
+                  break;
+              default:
+                  mergeable = false;
+          }
+
+          if (mergeable) {
+              try {
+                  int oldValue = std::stoi(it->second);
+                  int newValue = oldValue + value;
+                  it->second = std::to_string(newValue);
+                  return; // Merged
+              } catch (...) {
+                  // If conversion fails, just push new
+              }
+          }
+      }
+
+      // Not merged, push new
+      commands.push_back(std::map<DroneCommand, std::string>{{cmd, std::to_string(value)}});
+  };
+
+
   if (path.size() < 2)
     return;
 
@@ -244,8 +296,9 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
   commands.push_back(
       std::map<DroneCommand, std::string>{{CMD_TAKEOFF, ""}});
 
-  commands.push_back(
-      std::map<DroneCommand, std::string>{{CMD_MOVE_UP, "" + std::to_string(params.drone.takeoff_altitude_cm)}});
+  // optimize push logic for UP command as well? User request specifically mentioned "consecutive".
+  // The first move up is usually unique, but using the helper is consistent.
+  pushOrMerge(CMD_MOVE_UP, params.drone.takeoff_altitude_cm);
   
   for (size_t i = 0; i + 1 < path.size(); ++i) {
 
@@ -263,21 +316,17 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
     // ---- Rotation ----
     if (turnDeg > params.drone.dead_zone_deg || turnDeg < -params.drone.dead_zone_deg){ 
         if (turnDeg > 0) {
-        commands.push_back(
-            std::map<DroneCommand, std::string>{{CMD_ROTATE_CCW, std::to_string(turnDeg)}});
+            pushOrMerge(CMD_ROTATE_CCW, turnDeg);
       } else if (turnDeg < 0) {
-        commands.push_back(
-            std::map<DroneCommand, std::string>{{CMD_ROTATE_CW, std::to_string(-turnDeg)}});    
+            pushOrMerge(CMD_ROTATE_CW, -turnDeg);
       }
       currentYaw = targetYaw;
     }  
-    
-    
-    
 
     // ---- Forward ----
-    commands.push_back(
-        std::map<DroneCommand, std::string>{{CMD_MOVE_FORWARD, std::to_string(forwardCm)}});
+    if (forwardCm > 0) {
+        pushOrMerge(CMD_MOVE_FORWARD, forwardCm);
+    }
   }
   commands.push_back(
       std::map<DroneCommand, std::string>{{CMD_LAND, ""}});

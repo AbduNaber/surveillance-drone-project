@@ -97,8 +97,11 @@ def telemetry_loop():
 # ================= COMMAND THREAD =================
 def command_sequence():
     global running
-    tello.streamon()
-    print("[TELLO] Starting video stream...")
+    try:
+        tello.streamon()
+        print("[TELLO] Starting video stream...")
+    except Exception as e:
+        print(f"[TELLO] Failed to start stream: {e}")
 
     time.sleep(2)
 
@@ -109,93 +112,152 @@ def command_sequence():
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((HOST, PORT))
     server.listen(1)
+    
+    # Set timeout for accept loop to allow checking 'running' flag
+    server.settimeout(1.0)
 
     print(f"[TELLO CMD] Listening on tcp://{HOST}:{PORT}")
 
-    conn, addr = server.accept()  
-    print(f"[TELLO CMD] Client connected from {addr}")
-
-    buffer = b""
-    commands: list[Command] = []
     while running:
-        data = conn.recv(4096)     
-        if not data:
-            print("[TELLO CMD] Client disconnected")
-            break
-
-        buffer += data
-
-        # Handle stream framing (JSON per message)
         try:
-            msg = json.loads(buffer.decode())
-            buffer = b""
-        except json.JSONDecodeError:
-            continue  # wait for more data
+            conn, addr = server.accept()
+        except socket.timeout:
+            continue
+        except Exception as e:
+            print(f"[TELLO CMD] Accept error: {e}")
+            continue
 
-        for cmd in msg["commands"]:
-            cmd_str = cmd["command"]
-            value = int(cmd["value"] if cmd["value"] is not '' else 0)
-
+        print(f"[TELLO CMD] Client connected from {addr}")
+        
+        # Buffer for this connection
+        buffer = ""
+        decoder = json.JSONDecoder()
+        
+        # Inner loop for handling one connection
+        while running:
             try:
-                key = int(cmd_str)
-                cmd_enum = TelloCommand(key)
-            except (ValueError, KeyError):
-                print(f'key error key: <{cmd_str}>' )
-                cmd_enum = TelloCommand.UNKNOWN
-            commands.append(Command(cmd_enum, value))
-        print(f"[TELLO CMD] Received {len(commands)} commands")
-        # Execute commands
-        for command in commands:  
-            print(f"[TELLO CMD] Executing command: {command.command}, value: {command.value}")
-            if command.command == TelloCommand.TAKEOFF:
-                tello.takeoff()
-            elif command.command == TelloCommand.LAND:
-                tello.land()
-            elif command.command == TelloCommand.EMERGENCY:
-                tello.emergency()
-            elif command.command == TelloCommand.UP:
-                tello.move_up(command.value)
-            elif command.command == TelloCommand.DOWN:
-                tello.move_down(command.value)
-            elif command.command == TelloCommand.LEFT:
-                tello.move_left(command.value)
-            elif command.command == TelloCommand.RIGHT:
-                tello.move_right(command.value)
-            elif command.command == TelloCommand.FORWARD:
-                tello.move_forward(command.value)
-            elif command.command == TelloCommand.BACKWARD:
-                tello.move_back(command.value)
-            elif command.command == TelloCommand.ROTATE_CW:
-                tello.rotate_clockwise(command.value)
-            elif command.command == TelloCommand.ROTATE_CCW:
-                tello.rotate_counter_clockwise(command.value)
-            elif command.command == TelloCommand.STOP:
-                tello.send_rc_control(0, 0, 0, 0)
-            elif command.command == TelloCommand.FLIP_LEFT:
-                tello.flip_left()
-            elif command.command == TelloCommand.FLIP_RIGHT:
-                tello.flip_right()
-            elif command.command == TelloCommand.FLIP_FORWARD:
-                tello.flip_forward()
-            elif command.command == TelloCommand.FLIP_BACK:
-                tello.flip_back()
-            elif command.command == TelloCommand.SET_SPEED:
-                tello.set_speed(command.value)
-            else:
-                print(f"[TELLO CMD] Unknown command: {command.command}")    
-            time.sleep(0.1)  # small delay between commands
-        commands.clear()
-        # ACK to client
-        conn.sendall(b"OK")
+                data = conn.recv(4096)
+            except socket.error:
+                break
+                
+            if not data:
+                print("[TELLO CMD] Client disconnected")
+                break
 
-    conn.close()
+            # Decode bytes to string and append to buffer
+            try:
+                buffer += data.decode('utf-8')
+            except UnicodeDecodeError:
+                print("[TELLO CMD] Decode error, skipping chunk")
+                continue
+
+            # Process all complete JSON objects in the buffer
+            while buffer:
+                buffer = buffer.lstrip()
+                if not buffer:
+                    break
+                
+                try:
+                    msg, idx = decoder.raw_decode(buffer)
+                    buffer = buffer[idx:]
+                except ValueError:
+                    # Not enough data for a full JSON object yet
+                    break
+                
+                # Check for commands list
+                if "commands" not in msg:
+                    continue
+
+                commands: list[Command] = []
+                for cmd in msg["commands"]:
+                    cmd_str = cmd.get("command", "")
+                    # handle value being potentially empty or string
+                    val_raw = cmd.get("value", 0)
+                    if val_raw == '':
+                        val_raw = 0
+                    
+                    try:
+                        value = int(val_raw)
+                    except ValueError:
+                        value = 0
+
+                    try:
+                        key = int(cmd_str)
+                        cmd_enum = TelloCommand(key)
+                    except (ValueError, KeyError, TypeError):
+                        print(f'[TELLO CMD] Invalid key: <{cmd_str}>' )
+                        cmd_enum = TelloCommand.UNKNOWN
+                    
+                    commands.append(Command(cmd_enum, value))
+
+                print(f"[TELLO CMD] Received {len(commands)} commands")
+                
+                # Execute commands
+                success = True
+                for command in commands:  
+                    print(f"[TELLO CMD] Executing command: {command.command}, value: {command.value}")
+                    try:
+                        if command.command == TelloCommand.TAKEOFF:
+                            tello.takeoff()
+                        elif command.command == TelloCommand.LAND:
+                            tello.land()
+                        elif command.command == TelloCommand.EMERGENCY:
+                            tello.emergency()
+                        elif command.command == TelloCommand.UP:
+                            tello.move_up(command.value)
+                        elif command.command == TelloCommand.DOWN:
+                            tello.move_down(command.value)
+                        elif command.command == TelloCommand.LEFT:
+                            tello.move_left(command.value)
+                        elif command.command == TelloCommand.RIGHT:
+                            tello.move_right(command.value)
+                        elif command.command == TelloCommand.FORWARD:
+                            tello.move_forward(command.value)
+                        elif command.command == TelloCommand.BACKWARD:
+                            tello.move_back(command.value)
+                        elif command.command == TelloCommand.ROTATE_CW:
+                            tello.rotate_clockwise(command.value)
+                        elif command.command == TelloCommand.ROTATE_CCW:
+                            tello.rotate_counter_clockwise(command.value)
+                        elif command.command == TelloCommand.STOP:
+                            tello.send_rc_control(0, 0, 0, 0)
+                        elif command.command == TelloCommand.FLIP_LEFT:
+                            tello.flip_left()
+                        elif command.command == TelloCommand.FLIP_RIGHT:
+                            tello.flip_right()
+                        elif command.command == TelloCommand.FLIP_FORWARD:
+                            tello.flip_forward()
+                        elif command.command == TelloCommand.FLIP_BACK:
+                            tello.flip_back()
+                        elif command.command == TelloCommand.SET_SPEED:
+                            tello.set_speed(command.value)
+                        else:
+                            print(f"[TELLO CMD] Unknown command: {command.command}")
+                    except Exception as e:
+                        print(f"[TELLO CMD] Execution Error: {e}")
+                        success = False
+                        # We continue executing other commands? 
+                        # Usually if one fails, might want to stop, but user wanted "robustness".
+                        # Let's continue but report error? 
+                        # Actually if connection lost, tello object might raise, so maybe break?
+                        # djitellopy usually catches internal errors but if it raises, it's serious.
+                        # We'll allow continue for now.
+                    
+                    time.sleep(0.1)  # small delay between commands
+                
+                commands.clear()
+                
+                # ACK to client
+                try:
+                    conn.sendall(b"OK")
+                except socket.error:
+                    print("[TELLO CMD] Failed to send ACK")
+                    break
+
+        # Connection closed
+        conn.close()
+
     server.close()
-        
-
-        
-
-    
-	
 
 # ================= START =================
 telemetry_thread = threading.Thread(target=telemetry_loop, daemon=True)

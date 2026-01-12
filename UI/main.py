@@ -39,6 +39,7 @@ class Mainwindow(QMainWindow):
     path_received = pyqtSignal(list)
     drone_update = pyqtSignal(float, float)
     person_detected = pyqtSignal(dict)
+    battery_update = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -84,6 +85,7 @@ class Mainwindow(QMainWindow):
         self.path_received.connect(self.on_path_received)
         self.drone_update.connect(self.update_drone_position)
         self.person_detected.connect(self.on_person_detected)
+        self.battery_update.connect(self.on_battery_received)
 
         # ✅ start TCP listener in background
         self.start_path_listener()
@@ -93,8 +95,9 @@ class Mainwindow(QMainWindow):
         # ===== DRONE STATE =====
         self.drone_x = 0.0
         self.drone_y = 0.0
-        self.drone_scale = 5000  # pixels per meter (approx)
+        self.drone_scale = 10000  # pixels per meter (approx)
         self.trajectory_initialized = False
+        self.low_battery_warned = False
 
         # ===== DRONE ICON =====
         # Uses independent item
@@ -572,7 +575,7 @@ class Mainwindow(QMainWindow):
                 self.drone_y += wy * dt
 
                 self.drone_update.emit(self.drone_x, self.drone_y)
-                self.battery_widget.setValue(msg.get("bat", 0))
+                self.battery_update.emit(int(msg.get("bat", 0)))
                 #print("state ok")
 
         # Need to import time inside method or file level if not already
@@ -646,6 +649,16 @@ class Mainwindow(QMainWindow):
         for tid, item in self.person_items.items():
             self.scene.removeItem(item)
         self.person_items.clear()
+
+    def on_battery_received(self, level):
+        self.battery_widget.setValue(level)
+        
+        if level < 20 and not self.low_battery_warned:
+            self.low_battery_warned = True 
+            QMessageBox.warning(self, "Low Battery", f"Warning: Drone battery is low! ({level}%)")
+            self.statusBar().showMessage(f"⚠️ LOW BATTERY: {level}%", 0) 
+        elif level >= 20:
+             self.low_battery_warned = False
 
     # ================= UI UPDATE =================
     def update_drone_position(self, x_m, y_m):
