@@ -46,5 +46,6 @@ struct appParams
         double turn_rate;    // degrees per second
         double initial_yaw_rad; // initial yaw in radians
         double dead_zone_deg;   // degrees
+        int takeoff_altitude_cm; // takeoff altitude in centimeters
     } drone;
 };

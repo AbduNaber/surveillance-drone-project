@@ -241,7 +241,12 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
     return;
 
   double currentYaw = initialYawRad;
+  commands.push_back(
+      std::map<DroneCommand, std::string>{{CMD_TAKEOFF, ""}});
 
+  commands.push_back(
+      std::map<DroneCommand, std::string>{{CMD_MOVE_UP, "" + std::to_string(params.drone.takeoff_altitude_cm)}});
+  
   for (size_t i = 0; i + 1 < path.size(); ++i) {
 
     double dx = path[i + 1].x - path[i].x;
@@ -274,7 +279,8 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
     commands.push_back(
         std::map<DroneCommand, std::string>{{CMD_MOVE_FORWARD, std::to_string(forwardCm)}});
   }
-
+  commands.push_back(
+      std::map<DroneCommand, std::string>{{CMD_LAND, ""}});
   drone_commands = std::move(commands);
 }
 

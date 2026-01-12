@@ -3,7 +3,7 @@
 
 VideoStreamer::VideoStreamer()
     : receiver_("udp://@0.0.0.0:11111"),
-      publisher_("127.0.0.1", 5577),
+      publisher_("239.255.0.1", 5577),
       running_(true)
 {
 }
@@ -32,7 +32,7 @@ void VideoStreamer::run() {
         continuous_errors = 0; // Reset once we get a good frame
         publisher_.sendFrame(frame);
 
-        cv::imshow("C++ Video", frame);
-        if (cv::waitKey(1) == 27) running_ = false;
+        //cv::imshow("C++ Video", frame);
+        //if (cv::waitKey(1) == 27) running_ = false;
     }
 }

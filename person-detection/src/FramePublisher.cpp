@@ -8,6 +8,11 @@ FramePublisher::FramePublisher(const std::string& destination_ip, int port)
         std::cerr << "Error creating socket" << std::endl;
         return;
     }
+    
+    int enable = 1;
+    if (setsockopt(sockfd_, SOL_SOCKET, SO_BROADCAST, &enable, sizeof(enable)) < 0) {
+        perror("setsockopt SO_BROADCAST failed");
+    }
 
     memset(&dest_addr_, 0, sizeof(dest_addr_));
     dest_addr_.sin_family = AF_INET;

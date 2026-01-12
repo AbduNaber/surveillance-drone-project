@@ -1,4 +1,5 @@
 import sys
+import cv2
 import json
 import socket
 import threading
@@ -19,7 +20,7 @@ from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from battery_widget import BatteryWidget
 from wifi_widget import WifiWidget
 from PyQt6.QtGui import QAction
-# --- YENİ EKLENDİ: Logları Yakalamak İçin Sınıf ---
+
 class LogStream(QObject):
     """
     Terminal çıktılarını (print) yakalayıp PyQt sinyaline dönüştürür.
@@ -34,14 +35,15 @@ class LogStream(QObject):
         pass
 
 class Mainwindow(QMainWindow):
-    # ✅ Signal to safely move data from socket thread → Qt main thread
+
     path_received = pyqtSignal(list)
     drone_update = pyqtSignal(float, float)
+    person_detected = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
 
-
+        
         self.setAcceptDrops(True)
         self.default_map_path = "/Users/esin/drone projemiz/src/assets/map.svg"
 
@@ -71,6 +73,7 @@ class Mainwindow(QMainWindow):
 
         # Keep track of path line items so we can clear them cleanly
         self.path_items = []
+        self.person_items = {}
 
         self.setup_map()
         self.setup_log_dock()
@@ -79,33 +82,50 @@ class Mainwindow(QMainWindow):
 
         # ✅ connect signal to UI function (runs on Qt main thread)
         self.path_received.connect(self.on_path_received)
-        #self.drone_update.connect(self.update_drone_position)
+        self.drone_update.connect(self.update_drone_position)
+        self.person_detected.connect(self.on_person_detected)
 
         # ✅ start TCP listener in background
         self.start_path_listener()
-        #self.start_tello_listener()
+        self.start_tello_listener()
+        self.start_person_listener()
         
         # ===== DRONE STATE =====
         self.drone_x = 0.0
         self.drone_y = 0.0
+        self.drone_scale = 5000  # pixels per meter (approx)
         self.trajectory_initialized = False
 
         # ===== DRONE ICON =====
-        # Using a distinct color for the drone on the map
-        self.drone_item_visual = self.scene.addEllipse(
-            -10, -10, 20, 20,
-            QPen(Qt.GlobalColor.blue),
-            QBrush(Qt.GlobalColor.blue)
-        )
+        # Uses independent item
+        self.drone_item_visual = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/drone_point.svg")
+        self.scene.addItem(self.drone_item_visual)
         self.drone_item_visual.setZValue(100) # High Z value to be on top
+        self.drone_item_visual.setScale(3)  # Scale down if too big
+        # Center the item (approximation, better if we knew SVG size)
+        # Using a fixed offset if we assume the icon is roughly centered in its viewbox
+        # or we just rely on its own coordinate system.
+        # Let's adjust origin for easier positioning
+        d_bounds = self.drone_item_visual.boundingRect()
+        self.drone_item_visual.setTransformOriginPoint(d_bounds.center())
+        # To center it exactly on (0,0) initially -> we setPos later.
+        # But visual origin is top-left.
+        # We will handle centering logic in update_poisition or here by offset.
+        # Let's just create it here.
 
         # ===== TRAJECTORY =====
         self.trajectory_path = QPainterPath()
         self.trajectory_item = self.scene.addPath(
             self.trajectory_path,
-            QPen(Qt.GlobalColor.blue, 3)
+            QPen(Qt.GlobalColor.blue, 5)
         )
         self.trajectory_item.setZValue(90)
+        self.camera_proc = None
+        self.stream_proc = None
+
+        self.ctx = zmq.Context()
+        self.emergency_pub = self.ctx.socket(zmq.PUB)
+        self.emergency_pub.bind("tcp://*:6002")
 
         self.statusBar().showMessage("Ready")
         # --- YENİ EKLENDİ: İlk test logu ---
@@ -215,6 +235,7 @@ class Mainwindow(QMainWindow):
         cam_act.triggered.connect(self.toggle_camera)
         tb.addAction(cam_act)
 
+
         detect_act = QAction("Start Detection", self)
         detect_act.triggered.connect(self.start_detection)
         tb.addAction(detect_act)
@@ -225,9 +246,15 @@ class Mainwindow(QMainWindow):
         clear_act = QAction("Clear Map", self)
         clear_act.triggered.connect(self.clear_map_content)
         tb.addAction(clear_act)
+        tb.addSeparator()
 
+        self.land_button = QAction("Land Drone", self)
+        self.land_button.triggered.connect(self.land_drone)
+        tb.addAction(self.land_button)
+
+        tb.addSeparator()
         # --- GRUP 5: Acil Durdurma (STOP) ---
-        stop_act = QAction("STOP", self)
+        stop_act = QAction("EMERGENCY STOP", self)
         # İsteğe bağlı: Kırmızı renk vurgusu için stil eklenebilir ama QAction'da CSS zordur,
         # Genelde ikon kullanılır. Şimdilik metin kalsın.
         stop_act.triggered.connect(self.emergency_stop)
@@ -235,6 +262,8 @@ class Mainwindow(QMainWindow):
 
         tb.addSeparator()
 
+
+        tb.addSeparator()
         # --- Mevcut Log Butonu ---
         self.show_logs_action = QAction("Show Logs", self)
         self.show_logs_action.setCheckable(True) 
@@ -243,6 +272,7 @@ class Mainwindow(QMainWindow):
         tb.addAction(self.show_logs_action)
         
         self.log_dock.visibilityChanged.connect(self.show_logs_action.setChecked)
+
 
 
 
@@ -381,6 +411,36 @@ class Mainwindow(QMainWindow):
             "item": pin,
             "text": text
         })
+        
+        # [FEATURE] Teleport drone to Waypoint A
+        if label == "A":
+            # Reverse-engineer get position:
+            # final_x = center_x + sx
+            # center_x + (x_m * scale) = pos.x
+            # x_m * scale = pos.x - center_x
+            # x_m = (pos.x - center_x) / scale
+            
+            center_x = self.map_width_scene / 2
+            center_y = self.map_height_scene / 2
+            
+            # Note: pos.x() is what we used for setPos
+            # We want to find new drone_x, drone_y
+            
+            rx = pos.x() - center_x
+            ry = pos.y() - center_y
+            
+            # sx = rx
+            # sy = ry 
+            # recall: sy = -y_m * scale => y_m = -sy / scale
+            
+            new_drone_x = rx / self.drone_scale
+            new_drone_y = -ry / self.drone_scale # coordinate flip
+            
+            print(f"[UI] Teleporting drone to A: ({new_drone_x:.2f}, {new_drone_y:.2f})")
+            
+            self.drone_x = new_drone_x
+            self.drone_y = new_drone_y
+            self.update_drone_position(self.drone_x, self.drone_y)
 
     def clear_waypoints(self):
         for wp in self.waypoints:
@@ -512,6 +572,7 @@ class Mainwindow(QMainWindow):
                 self.drone_y += wy * dt
 
                 self.drone_update.emit(self.drone_x, self.drone_y)
+                self.battery_widget.setValue(msg.get("bat", 0))
                 #print("state ok")
 
         # Need to import time inside method or file level if not already
@@ -533,6 +594,7 @@ class Mainwindow(QMainWindow):
                 while True:
                     try:
                         msg = sock.recv_json()
+                        print("[UI] Person detected:", msg) 
                         if msg.get("event") == "new_person":
                             self.person_detected.emit(msg)
                     except Exception as e:
@@ -542,7 +604,7 @@ class Mainwindow(QMainWindow):
             except Exception as e:
                 print(f"Could not connect to person stream: {e}")
 
-        threading.Thread(target=listener, daemon=True).start()
+        threading.Thread(target=listener).start()
 
     def on_person_detected(self, msg):
         track_id = msg.get("track_id")
@@ -557,6 +619,7 @@ class Mainwindow(QMainWindow):
             self.person_items[track_id].setPos(pos)
         else:
             # Create new pin
+            
             pin = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/person_icon.svg")
             
             # Optional: Scale pin if needed, e.g. pin.setScale(0.5)
@@ -564,12 +627,12 @@ class Mainwindow(QMainWindow):
             
             self.scene.addItem(pin)
             pin.setPos(pos)
-            pin.setZValue(50) # Below drone, above map
+            pin.setZValue(200) # Below drone, above map
             
             # Center alignment attempt (if SVG bounds known)
             b = pin.boundingRect()
             pin.setTransformOriginPoint(b.center())
-            
+              
             # Center the item on the position by offsetting
             # pin.setPos(pos.x() - b.width()/2, pos.y() - b.height()/2)
             # Note: setPos sets the origin. If we want center at pos, we shift.
@@ -598,11 +661,14 @@ class Mainwindow(QMainWindow):
         # Here we have a map. Let's assume the drone starts at the center or 0,0 corresponds to a point.
         # For now, I'll use a direct visual scale.
         
-        scale = 100
+        scale = self.drone_scale
         
         # In test.py: sy = -y_m * scale.
         sx = x_m * scale
         sy = -y_m * scale 
+
+        if not self.drone_item_visual.isVisible():
+             self.drone_item_visual.show()
 
         # We probably want to offset this to a starting position on the map if we knew it.
         # For now, relative to (0,0) of the scene (top-left of map typically, but sceneRect might be adjusted).
@@ -615,7 +681,9 @@ class Mainwindow(QMainWindow):
         final_x = center_x + sx
         final_y = center_y + sy
 
-        self.drone_item_visual.setPos(final_x, final_y)
+        # Adjust for icon size so 'pos' is center
+        d_bounds = self.drone_item_visual.boundingRect()
+        self.drone_item_visual.setPos(final_x - d_bounds.width()/2, final_y - d_bounds.height()/2)
 
         # Tracjectory
         if not self.trajectory_initialized:
@@ -657,43 +725,120 @@ class Mainwindow(QMainWindow):
 
     def connect_drone(self):
         print(">> [Command] Attempting to connect to drone...")
-        # Buraya drone bağlantı kodu gelecek (örn: Tello connect)
+        proc = subprocess.Popen(
+            ["execs/tello_driver"]          # or "my_program.exe" on Windows
+        )
+        time.sleep(0.5)  # Give it a moment to start
+        if proc.poll() is None:
+            print("Tello Driver started successfully.")
+        else:
+            print("Failed to start Tello Driver.")
 
     def check_status(self):
         print(">> [Command] Checking drone status...")
-        # Batarya, ısı vb. verileri çekmek için
+
 
     def start_mission(self):
 
         print(">> [Command] Starting  mission...")
         proc = subprocess.Popen(
-            ["execs/mission_planner"]          # or "my_program.exe" on Windows
+            ["execs/mission_planner"]          
         )
         time.sleep(0.5)  # Give it a moment to start
         if proc.poll() is None:
             print("Mission Planner started successfully.")
         else:
             print("Failed to start Mission Planner.")
+
     def toggle_camera(self):
-        print(">> [Command] Camera on/off toggled.")
-        # Video akışını başlatmak/durdurmak için
+
+
+        if self.camera_proc and self.camera_proc.poll() is None:
+            print("[Camera] Stopping camera process")
+            self.camera_proc.terminate()
+            self.camera_proc.wait()
+            self.camera_proc = None
+            return
+
+        if self.stream_proc and self.stream_proc.poll() is None:
+            print("[Camera] Stopping stream process")
+            self.stream_proc.terminate()
+            self.stream_proc.wait()
+            self.stream_proc = None
+        
+        print("[Camera] Starting camera process")
+        self.stream_proc = subprocess.Popen(
+            ["/home/abdu/surveillance_drone_project/execs/video_streamer"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        time.sleep(0.5)  # Give it a moment to start
+        if self.stream_proc.poll() is None:
+            print("Tello Streamer started successfully.")
+        else:
+            print("Failed to start Tello Streamer.")
+
+        self.camera_proc = subprocess.Popen(
+            [sys.executable, "/home/abdu/surveillance_drone_project/UI/camera_view.py"]
+            
+
+        )
+
 
     def start_detection(self):
+        
+
         print(">> [Command] Object detection (Detection) started.")
-        # YOLO veya OpenCV algoritmalarını tetiklemek için
+
+        yolo_python = "/home/abdu/surveillance_drone_project/person-detection/venv/bin/python"
+        yolo_script = "/home/abdu/surveillance_drone_project/person-detection/src/YoloWorker.py"
+
+        proc = subprocess.Popen(
+            [yolo_python, yolo_script],
+            cwd="/home/abdu/surveillance_drone_project/person-detection"
+        )
+
+        time.sleep(0.5)
+
+        if proc.poll() is None:
+            print("YoloWorker started successfully.")
+            self.yolo_proc = proc
+        else:
+            print("Failed to start YoloWorker.")
+
 
     def clear_map_content(self):
         print(">> [Command] Clearing map content...")
-        self.clear_waypoints() # Mevcut fonksiyonunuz
-        self.clear_path()      # Mevcut fonksiyonunuz
-        # Eğer drone ikonunu da sıfırlamak isterseniz buraya ekleyebilirsiniz.
+        self.clear_waypoints() 
+        self.clear_path()      
+        self.clear_persons()
+        
+        # Clear drone trajectory
+        self.trajectory_path = QPainterPath()
+        self.trajectory_item.setPath(self.trajectory_path)
+        self.trajectory_initialized = False
+        
+        # Hide drone until next update
+        if hasattr(self, "drone_item_visual"):
+            self.drone_item_visual.hide()
+        
+    def land_drone(self):
+        msg = {"type": "land"}
+        self.emergency_pub.send_json(msg)
+        
+
 
     def emergency_stop(self):
         print("!! [EMERGENCY] STOP COMMAND SENT !!")
-        # Drone'a acil iniş veya motor durdurma komutu (Land/Emergency)
+        # connect 6002 and send emergency stop with zmq
 
-# ================= YENİ BUTON FONKSİYONLARI =================
-    
+        msg = {"type": "emergency_stop"}
+        self.emergency_pub.send_json(msg)
+        self.emergency_pub.close()
+        self.ctx.term()
+
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     w = Mainwindow()

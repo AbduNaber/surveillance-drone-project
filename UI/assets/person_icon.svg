@@ -12,7 +12,7 @@
        s21-24.7 21-39
        C53 11.4 43.6 2 32 2z"
     fill="none"
-    stroke="black"
+    stroke="red"
     stroke-width="4"
     stroke-linejoin="round"
   />
@@ -22,7 +22,7 @@
     cx="32"
     cy="22"
     r="5"
-    fill="black"
+    fill="red"
   />
 
   <!-- Person body -->
@@ -31,6 +31,6 @@
        c0-6 20-6 20 0
        v4
        H22z"
-    fill="black"
+    fill="red"
   />
 </svg>

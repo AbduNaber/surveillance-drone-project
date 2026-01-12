@@ -135,6 +135,7 @@ void loadParams(const std::string &paramFile, appParams &params)
     params.drone.turn_rate = config["drone"]["turn_rate"].as<double>();
     params.drone.initial_yaw_rad = config["drone"]["initial_yaw_rad"].as<double>();
     params.drone.dead_zone_deg = config["drone"]["dead_zone_deg"].as<double>(); 
+    params.drone.takeoff_altitude_cm = config["drone"]["takeoff_altitude_cm"].as<int>();
     
 }
 void getWaypointsFromUI(gridMap &map, coordinate &startCoord, coordinate &endCoord)

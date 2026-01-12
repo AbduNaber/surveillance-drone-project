@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (QWidget, QLabel, QHBoxLayout, QVBoxLayout, QFrame,
 from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QPainterPath, QMouseEvent
 from PyQt6.QtCore import Qt, QSize
 
-battery_level = 10
+battery_level = 0
 
 # _BatteryIcon sınıfında herhangi bir değişiklik yapmamıza gerek yok.
 class _BatteryIcon(QWidget):
