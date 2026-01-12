@@ -4,33 +4,61 @@ import socket
 import threading
 import math
 import zmq
+import subprocess
+import time
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QToolBar, QWidget,
     QSizePolicy, QGraphicsView, QGraphicsScene,
-    QGraphicsPathItem, QMessageBox
+    QGraphicsPathItem, QMessageBox,QDockWidget,QTextEdit
 )
 from PyQt6.QtGui import QPainter, QPen, QBrush, QPainterPath
-from PyQt6.QtCore import Qt, QEvent, pyqtSignal
+from PyQt6.QtCore import Qt, QEvent, pyqtSignal,QObject
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 
 from battery_widget import BatteryWidget
 from wifi_widget import WifiWidget
+from PyQt6.QtGui import QAction
+# --- YENİ EKLENDİ: Logları Yakalamak İçin Sınıf ---
+class LogStream(QObject):
+    """
+    Terminal çıktılarını (print) yakalayıp PyQt sinyaline dönüştürür.
+    Bu sayede threadlerden gelen print komutları arayüzü çökertmez.
+    """
+    new_text = pyqtSignal(str)
 
+    def write(self, text):
+        self.new_text.emit(str(text))
+
+    def flush(self):
+        pass
 
 class Mainwindow(QMainWindow):
     # ✅ Signal to safely move data from socket thread → Qt main thread
     path_received = pyqtSignal(list)
     drone_update = pyqtSignal(float, float)
-    person_detected = pyqtSignal(dict)
 
     def __init__(self):
         super().__init__()
+
+
+        self.setAcceptDrops(True)
+        self.default_map_path = "/Users/esin/drone projemiz/src/assets/map.svg"
 
         # ===== GRID CONFIG (MUST MATCH YAML) =====
         self.grid_width = 200
         self.grid_height = 200
         self.cell_size = 20  # world units per cell
+        # ==========================================
+        # 2. ADIM: Sonra Matrisi Oluştur
+        # ==========================================
+        self.grid_matrix = [[0 for _ in range(self.grid_width)] for _ in range(self.grid_height)]
+        
+        # TEST İÇİN: Haritanın ortasına sanal bir duvar koyalım.
+        # Bu koordinata tıkladığında pointer koymaması gerekir.
+        for y in range(90, 110):
+            for x in range(90, 110):
+                self.grid_matrix[y][x] = 1  # 1 = Duvar
 
         self.setWindowTitle("Drone Mission Planning Interface")
         self.setGeometry(200, 200, 1400, 900)
@@ -44,22 +72,18 @@ class Mainwindow(QMainWindow):
         # Keep track of path line items so we can clear them cleanly
         self.path_items = []
 
-        # Keep track of detected persons: track_id -> QGraphicsSvgItem
-        self.person_items = {}
-
         self.setup_map()
+        self.setup_log_dock()
         self.setup_top_toolbar()
         self.setup_main_toolbar()
 
         # ✅ connect signal to UI function (runs on Qt main thread)
         self.path_received.connect(self.on_path_received)
-        self.drone_update.connect(self.update_drone_position)
-        self.person_detected.connect(self.on_person_detected)
+        #self.drone_update.connect(self.update_drone_position)
 
         # ✅ start TCP listener in background
         self.start_path_listener()
-        self.start_tello_listener()
-        self.start_person_listener()
+        #self.start_tello_listener()
         
         # ===== DRONE STATE =====
         self.drone_x = 0.0
@@ -84,13 +108,48 @@ class Mainwindow(QMainWindow):
         self.trajectory_item.setZValue(90)
 
         self.statusBar().showMessage("Ready")
+        # --- YENİ EKLENDİ: İlk test logu ---
+        print("begining log panel.")
 
+# ================= LOG DOCK SETUP (YENİ) =================
+    def setup_log_dock(self):
+        # 1. Dock Widget Oluştur
+        self.log_dock = QDockWidget("System Logs", self)
+        self.log_dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        
+        # 2. İçine Metin Editörü Koy
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)  # Kullanıcı değiştiremesin
+        self.log_text.setStyleSheet("background-color: #1e1e1e; color: #00ff00; font-family: Consolas;") # Hacker/Terminal teması
+        self.log_dock.setWidget(self.log_text)
+
+        # 3. Ana Pencereye Sol Tarafa Ekle
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.log_dock)
+        
+        # Başlangıçta kapalı olsun istiyorsan:
+        # self.log_dock.hide()
+
+        # 4. stdout ve stderr'i Yönlendir
+        self.log_stream = LogStream()
+        self.log_stream.new_text.connect(self.append_log)
+        
+        sys.stdout = self.log_stream
+        sys.stderr = self.log_stream
+
+    def append_log(self, text):
+        # İmleci sona taşı ve metni ekle
+        self.log_text.moveCursor(self.log_text.textCursor().MoveOperation.End)
+        self.log_text.insertPlainText(text)
+        # Otomatik kaydırma
+        self.log_text.ensureCursorVisible()
     # ================= MAP =================
     def setup_map(self):
         self.view = QGraphicsView(self)
         self.scene = QGraphicsScene(self)
         self.view.setScene(self.scene)
         self.setCentralWidget(self.view)
+        self.view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.view.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
         self.map_item = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/map.svg")
         # Optional: prevent SVG from stealing clicks
@@ -118,7 +177,7 @@ class Mainwindow(QMainWindow):
         top = QToolBar("Status", self)
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, top)
         top.setMovable(False)
-
+        
         spacer = QWidget(self)
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         top.addWidget(spacer)
@@ -129,26 +188,120 @@ class Mainwindow(QMainWindow):
     def setup_main_toolbar(self):
         tb = self.addToolBar("Actions")
 
+        # --- GRUP 1: Bağlantı ve Durum ---
+        connect_act = QAction("Connect Drone", self)
+        connect_act.triggered.connect(self.connect_drone)
+        tb.addAction(connect_act)
+
+        status_act = QAction("Check Status", self)
+        status_act.triggered.connect(self.check_status)
+        tb.addAction(status_act)
+
+        tb.addSeparator() # Araya çizgi çeker
+
+        # --- GRUP 2: Görev Planlama ---
+        start_mission_act = QAction("Start Mission Planner", self)
+        start_mission_act.triggered.connect(self.start_mission)
+        tb.addAction(start_mission_act)
+
+        # (Mevcut Find Way butonunu burada koruduk)
         find_way_btn = tb.addAction("Find Way")
         find_way_btn.triggered.connect(self.send_waypoints_to_mission_planner)
 
-        clear_pins_btn = tb.addAction("Clear Pins")
-        clear_pins_btn.triggered.connect(self.clear_persons)
+        tb.addSeparator()
+
+        # --- GRUP 3: Kamera ve Algılama ---
+        cam_act = QAction("Camera", self)
+        cam_act.triggered.connect(self.toggle_camera)
+        tb.addAction(cam_act)
+
+        detect_act = QAction("Start Detection", self)
+        detect_act.triggered.connect(self.start_detection)
+        tb.addAction(detect_act)
+
+        tb.addSeparator()
+
+        # --- GRUP 4: Harita İşlemleri ---
+        clear_act = QAction("Clear Map", self)
+        clear_act.triggered.connect(self.clear_map_content)
+        tb.addAction(clear_act)
+
+        # --- GRUP 5: Acil Durdurma (STOP) ---
+        stop_act = QAction("STOP", self)
+        # İsteğe bağlı: Kırmızı renk vurgusu için stil eklenebilir ama QAction'da CSS zordur,
+        # Genelde ikon kullanılır. Şimdilik metin kalsın.
+        stop_act.triggered.connect(self.emergency_stop)
+        tb.addAction(stop_act)
+
+        tb.addSeparator()
+
+        # --- Mevcut Log Butonu ---
+        self.show_logs_action = QAction("Show Logs", self)
+        self.show_logs_action.setCheckable(True) 
+        self.show_logs_action.setChecked(True)   
+        self.show_logs_action.triggered.connect(self.toggle_logs)
+        tb.addAction(self.show_logs_action)
+        
+        self.log_dock.visibilityChanged.connect(self.show_logs_action.setChecked)
+
+
+
+    # --- YENİ EKLENDİ: Log Toggle Fonksiyonu ---
+    def toggle_logs(self, checked):
+        if checked:
+            self.log_dock.show()
+        else:
+            self.log_dock.hide()
 
     # ================= EVENTS =================
     def eventFilter(self, obj, event):
+        # Ctrl + Mouse Wheel → Zoom
+        if obj == self.view.viewport() and event.type() == QEvent.Type.Wheel:
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                zoom_factor = 1.15
+
+                if event.angleDelta().y() > 0:
+                    self.view.scale(zoom_factor, zoom_factor)
+                else:
+                    self.view.scale(1 / zoom_factor, 1 / zoom_factor)
+
+                return True  # consume event
+
+        # --- MOUSE TIKLAMA (GÜNCELLENDİ) ---
         if obj == self.view.viewport() and event.type() == QEvent.Type.MouseButtonPress:
-            clicked = self.view.mapToScene(event.pos())
+            if event.button() == Qt.MouseButton.LeftButton:
+                clicked_pos = self.view.mapToScene(event.pos())
 
-            if len(self.waypoints) == self.max_waypoints:
-                self.clear_waypoints()
+                # 1. KONTROL: Tıklanan yer harita resminin sınırları içinde mi?
+                # Eğer harita resminin dışındaki siyah boşluğa tıklarsan reddeder.
+                if hasattr(self, "map_item"):
+                    map_bounds = self.map_item.boundingRect()
+                    if not map_bounds.contains(clicked_pos):
+                    
+                        return True
 
-            if len(self.waypoints) == 0:
-                self.add_waypoint(clicked, "A", Qt.GlobalColor.green)
-            elif len(self.waypoints) == 1:
-                self.add_waypoint(clicked, "B", Qt.GlobalColor.red)
+                # Koordinatları Grid'e çevir
+                gx, gy = self.scene_to_grid(clicked_pos)
+
+                # 2. KONTROL: Grid üzerinde duvar veya engel var mı?
+                if not self.is_location_walkable(gx, gy):
+                    # Kullanıcıya uyarı ver (Sol alttaki status bar'da yazar)
+                    self.statusBar().showMessage(f"Engel! ({gx}, {gy}) noktasına gidilemez.", 2000)
+                    return True
+
+                # Her şey tamamsa Waypoint ekle
+                if len(self.waypoints) == self.max_waypoints:
+                    self.clear_waypoints()
+
+                if len(self.waypoints) == 0:
+                    self.add_waypoint(clicked_pos, "A", Qt.GlobalColor.green)
+                elif len(self.waypoints) == 1:
+                    self.add_waypoint(clicked_pos, "B", Qt.GlobalColor.red)
+                
+                return True
 
         return False
+
 
     # ================= COORDINATE CONVERSION =================
     def scene_to_grid(self, scene_pos):
@@ -165,7 +318,32 @@ class Mainwindow(QMainWindow):
         gy = max(0, min(self.grid_height - 1, gy))
 
         return gx, gy
+# ================= VALIDATION (KONTROL) =================
+    def is_location_walkable(self, gx, gy):
+        # ---------------------------------------------------------
+        # AYAR: Güvenlik Payı (Duvarlardan kaç kare uzak durulsun?)
+        # Örnek: 2 yaparsan duvara 2 kare (40 birim) yaklaşamazsın.
+        margin = 2 
+        # ---------------------------------------------------------
 
+        # 1. Kenar Kontrolü (Sınırlara çok yakınsa YASAKLA)
+        # Sol kenar (0) ve Sağ kenar (width) kontrolü
+        if gx < margin or gx >= (self.grid_width - margin):
+            return False
+        
+        # Üst kenar (0) ve Alt kenar (height) kontrolü
+        if gy < margin or gy >= (self.grid_height - margin):
+            return False
+        
+        # 2. İç Duvar (Matrix) Kontrolü
+        try:
+            if self.grid_matrix[gy][gx] == 1:
+                return False
+        except IndexError:
+            return False
+
+        return True
+    
     def grid_to_scene(self, gx, gy):
         world_x = gx * self.cell_size
         world_y = gy * self.cell_size
@@ -448,7 +626,74 @@ class Mainwindow(QMainWindow):
 
         self.trajectory_item.setPath(self.trajectory_path)
 
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
 
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if not urls:
+            return
+
+        file_path = urls[0].toLocalFile()
+
+        if not file_path.lower().endswith(".svg"):
+            QMessageBox.warning(self, "Invalid File", "Only SVG map files allowed")
+            return
+
+        self.change_map(file_path)
+
+
+    def change_map(self, svg_path):
+        # SADECE map'i değiştir, scene'e dokunma
+        if hasattr(self, "map_item") and self.map_item:
+            self.scene.removeItem(self.map_item)
+
+        self.map_item = QGraphicsSvgItem(svg_path)
+        self.map_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+        self.map_item.setZValue(-1000)  # her şeyin arkasında
+
+        self.scene.addItem(self.map_item)
+
+    def connect_drone(self):
+        print(">> [Command] Attempting to connect to drone...")
+        # Buraya drone bağlantı kodu gelecek (örn: Tello connect)
+
+    def check_status(self):
+        print(">> [Command] Checking drone status...")
+        # Batarya, ısı vb. verileri çekmek için
+
+    def start_mission(self):
+
+        print(">> [Command] Starting  mission...")
+        proc = subprocess.Popen(
+            ["execs/mission_planner"]          # or "my_program.exe" on Windows
+        )
+        time.sleep(0.5)  # Give it a moment to start
+        if proc.poll() is None:
+            print("Mission Planner started successfully.")
+        else:
+            print("Failed to start Mission Planner.")
+    def toggle_camera(self):
+        print(">> [Command] Camera on/off toggled.")
+        # Video akışını başlatmak/durdurmak için
+
+    def start_detection(self):
+        print(">> [Command] Object detection (Detection) started.")
+        # YOLO veya OpenCV algoritmalarını tetiklemek için
+
+    def clear_map_content(self):
+        print(">> [Command] Clearing map content...")
+        self.clear_waypoints() # Mevcut fonksiyonunuz
+        self.clear_path()      # Mevcut fonksiyonunuz
+        # Eğer drone ikonunu da sıfırlamak isterseniz buraya ekleyebilirsiniz.
+
+    def emergency_stop(self):
+        print("!! [EMERGENCY] STOP COMMAND SENT !!")
+        # Drone'a acil iniş veya motor durdurma komutu (Land/Emergency)
+
+# ================= YENİ BUTON FONKSİYONLARI =================
+    
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     w = Mainwindow()

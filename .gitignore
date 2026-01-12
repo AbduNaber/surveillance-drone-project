@@ -5,4 +5,5 @@ grid_map/
 person-detection/lib/
 person-detection/bin/
 person-detection/venv/
-
+person-detection/dist/
+person-detection/build/

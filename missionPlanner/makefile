@@ -6,7 +6,7 @@ CXXFLAGS = -std=c++17 -Wall -O3 -Iinclude
 LDFLAGS = -lyaml-cpp -lzmq
 
 # Executable name
-TARGET = grid_map
+TARGET = mission_planner
 
 # Directories
 SRCDIR = src

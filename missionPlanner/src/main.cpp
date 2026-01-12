@@ -236,7 +236,7 @@ int main()
     // const double cellSize = 20; // 1 pixel = 1 birim
 
     
-    loadParams("params/general_params.yaml", params);
+    loadParams("/home/abdu/surveillance_drone_project/missionPlanner/params/general_params.yaml", params);
 
     const char *filename = params.map.map_file.c_str();
     const int gridSize = params.grid.width; 

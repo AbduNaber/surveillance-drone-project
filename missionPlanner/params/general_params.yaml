@@ -4,7 +4,7 @@ grid:
   cell_size: 20
 
 map:
-  map_file: "map.svg"
+  map_file: "/home/abdu/surveillance_drone_project/UI/assets/map.svg"
   resolution: 0.025 # meters per pixel
 
 path_planning:
