@@ -34575,7 +34575,7 @@
 <rect x='3010' y='1020' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='3020' y='1020' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='3030' y='1020' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
-<rect x='3040' y='1020' width='10' height='10' fill='blue' stroke='lightgray' stroke-width='0.2'/>
+<rect x='3040' y='1020' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='3050' y='1020' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='3060' y='1020' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='3070' y='1020' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
@@ -55705,7 +55705,7 @@
 <rect x='2630' y='1650' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2640' y='1650' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2650' y='1650' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
-<rect x='2660' y='1650' width='10' height='10' fill='yellow' stroke='lightgray' stroke-width='0.2'/>
+<rect x='2660' y='1650' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2670' y='1650' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2680' y='1650' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2690' y='1650' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
@@ -59395,7 +59395,7 @@
 <rect x='2570' y='1760' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2580' y='1760' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2590' y='1760' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
-<rect x='2600' y='1760' width='10' height='10' fill='yellow' stroke='lightgray' stroke-width='0.2'/>
+<rect x='2600' y='1760' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2610' y='1760' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2620' y='1760' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='2630' y='1760' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
@@ -61194,8 +61194,8 @@
 <rect x='400' y='1820' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='410' y='1820' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='420' y='1820' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
-<rect x='430' y='1820' width='10' height='10' fill='green' stroke='lightgray' stroke-width='0.2'/>
-<rect x='440' y='1820' width='10' height='10' fill='yellow' stroke='lightgray' stroke-width='0.2'/>
+<rect x='430' y='1820' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
+<rect x='440' y='1820' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='450' y='1820' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='460' y='1820' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>
 <rect x='470' y='1820' width='10' height='10' fill='white' stroke='lightgray' stroke-width='0.2'/>

@@ -14,15 +14,112 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QGraphicsView, QGraphicsScene,
     QGraphicsPathItem, QMessageBox, QDockWidget, QTextEdit,
     QDialog, QVBoxLayout, QLabel, QSpinBox, QPushButton, QHBoxLayout,
-    QSlider
+    QSlider, QTableWidget, QTableWidgetItem, QHeaderView
 )
-from PyQt6.QtGui import QPainter, QPen, QBrush, QPainterPath
+from PyQt6.QtGui import QPainter, QPen, QBrush, QPainterPath, QColor
 from PyQt6.QtCore import Qt, QEvent, pyqtSignal, QObject, pyqtSlot
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 
 from battery_widget import BatteryWidget
 from wifi_widget import WifiWidget
 from PyQt6.QtGui import QAction
+
+class StatusDialog(QDialog):
+    def __init__(self, parent, processes):
+        super().__init__(parent)
+        self.setWindowTitle("System Status")
+        self.resize(600, 300)
+        self.processes = processes
+        
+        layout = QVBoxLayout()
+        
+        self.table = QTableWidget()
+        self.table.setColumnCount(3)
+        self.table.setHorizontalHeaderLabels(["Process Name", "Status", "Action"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        
+        layout.addWidget(self.table)
+        
+        self.refresh_table()
+        
+        btn_layout = QHBoxLayout()
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.clicked.connect(self.refresh_table)
+        btn_layout.addWidget(refresh_btn)
+        
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        btn_layout.addWidget(close_btn)
+        
+        layout.addLayout(btn_layout)
+        self.setLayout(layout)
+        
+    def refresh_table(self):
+        self.table.setRowCount(0)
+        
+        for name, proc in self.processes.items():
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            
+            # Name Item
+            name_item = QTableWidgetItem(name)
+            self.table.setItem(row, 0, name_item)
+            
+            # Status Item
+            status = "unknown"
+            bg_color = QColor("gray")
+            fg_color = QColor("white")
+            
+            is_running = False
+            
+            if proc is None:
+                status = "Not Started"
+                bg_color = QColor("#808080") # Grey
+            elif proc.poll() is None:
+                status = "RUNNING"
+                bg_color = QColor("#4CAF50") # Green
+                is_running = True
+            else:
+                status = f"STOPPED ({proc.returncode})"
+                bg_color = QColor("#F44336") # Red
+                
+            status_item = QTableWidgetItem(status)
+            status_item.setBackground(bg_color)
+            status_item.setForeground(fg_color)
+            status_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            status_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            
+            self.table.setItem(row, 1, status_item)
+            
+            # Action Item (Kill Button)
+            if is_running:
+                kill_btn = QPushButton("Kill Process")
+                kill_btn.setStyleSheet("background-color: #F44336; color: white; font-weight: bold;")
+                # Use lambda to capture current name
+                kill_btn.clicked.connect(lambda checked, n=name: self.kill_process(n))
+                self.table.setCellWidget(row, 2, kill_btn)
+    
+    def kill_process(self, name):
+        proc = self.processes.get(name)
+        if proc and proc.poll() is None:
+            print(f">> [Status] Killing process: {name}")
+            try:
+                proc.terminate()
+                # Optional: Force kill if needed
+                # proc.kill()
+                proc.wait(timeout=0.2)
+            except Exception as e:
+                print(f"Error killing process: {e}")
+        
+        # Refresh table to show new status
+        self.refresh_table()
+        
+        # Update Main Window Buttons
+        if self.parent():
+            self.parent().update_ui_state()
 
 class RotationControlDialog(QDialog):
     def __init__(self, parent, socket_conn, direction, initial_value):
@@ -189,6 +286,11 @@ class Mainwindow(QMainWindow):
 
         
         self.setAcceptDrops(True)
+
+        # ===== PROCESS TRACKING =====
+        self.drone_proc = None
+        self.mission_proc = None
+        self.yolo_proc = None
         self.default_map_path = "/home/abdu/surveillance_drone_project/missionPlanner/okul-map.svg"
 
         # ===== GRID CONFIG (MUST MATCH YAML) =====
@@ -300,6 +402,8 @@ class Mainwindow(QMainWindow):
         self.ctx = zmq.Context()
         self.emergency_pub = self.ctx.socket(zmq.PUB)
         self.emergency_pub.bind("tcp://*:6002")
+
+
 
         self.statusBar().showMessage("Ready")
         # --- YENİ EKLENDİ: İlk test logu ---
@@ -413,36 +517,37 @@ class Mainwindow(QMainWindow):
         tb = self.addToolBar("Actions")
 
         # --- GRUP 1: Bağlantı ve Durum ---
-        connect_act = QAction("Connect Drone", self)
-        connect_act.triggered.connect(self.connect_drone)
-        tb.addAction(connect_act)
+        self.connect_act = QAction("Connect Drone", self)
+        self.connect_act.triggered.connect(self.connect_drone)
+        tb.addAction(self.connect_act)
 
-        status_act = QAction("Check Status", self)
-        status_act.triggered.connect(self.check_status)
-        tb.addAction(status_act)
+        self.status_act = QAction("Check Status", self)
+        self.status_act.triggered.connect(self.check_status)
+        tb.addAction(self.status_act)
 
         tb.addSeparator() # Araya çizgi çeker
 
         # --- GRUP 2: Görev Planlama ---
-        start_mission_act = QAction("Start Mission Planner", self)
-        start_mission_act.triggered.connect(self.start_mission)
-        tb.addAction(start_mission_act)
+        self.start_mission_act = QAction("Start Mission Planner", self)
+        self.start_mission_act.triggered.connect(self.start_mission)
+        tb.addAction(self.start_mission_act)
 
         # (Mevcut Find Way butonunu burada koruduk)
-        find_way_btn = tb.addAction("Start Flight")
-        find_way_btn.triggered.connect(self.send_waypoints_to_mission_planner)
+        self.start_flight_act = QAction("Start Flight", self)
+        self.start_flight_act.triggered.connect(self.send_waypoints_to_mission_planner)
+        tb.addAction(self.start_flight_act)
 
         tb.addSeparator()
 
         # --- GRUP 3: Kamera ve Algılama ---
-        cam_act = QAction("Camera", self)
-        cam_act.triggered.connect(self.toggle_camera)
-        tb.addAction(cam_act)
+        self.cam_act = QAction("Camera", self)
+        self.cam_act.triggered.connect(self.toggle_camera)
+        tb.addAction(self.cam_act)
 
 
-        detect_act = QAction("Start Detection", self)
-        detect_act.triggered.connect(self.start_detection)
-        tb.addAction(detect_act)
+        self.detect_act = QAction("Start Detection", self)
+        self.detect_act.triggered.connect(self.start_detection)
+        tb.addAction(self.detect_act)
 
         tb.addSeparator()
 
@@ -476,6 +581,37 @@ class Mainwindow(QMainWindow):
         tb.addAction(self.show_logs_action)
         
         self.log_dock.visibilityChanged.connect(self.show_logs_action.setChecked)
+        
+        # Initial State Check
+        self.update_ui_state()
+
+    def update_ui_state(self):
+        """
+        Enables/Disables buttons based on running processes.
+        """
+        drone_running = self.drone_proc is not None and self.drone_proc.poll() is None
+        mission_running = self.mission_proc is not None and self.mission_proc.poll() is None
+
+        # CONNECT: allow only if not running
+        self.connect_act.setEnabled(not drone_running)
+        self.start_mission_act.setEnabled(not mission_running)
+
+        # START FLIGHT: Only if BOTH are running
+        if drone_running and mission_running:
+            self.start_flight_act.setEnabled(True)
+            self.start_flight_act.setToolTip("Ready to fly")
+        else:
+            self.start_flight_act.setEnabled(False)
+            msg = []
+            if not drone_running: msg.append("Drone not connected")
+            if not mission_running: msg.append("Mission Planner not started")
+            self.start_flight_act.setToolTip(", ".join(msg))
+
+        # ACTIONS: Only if Drone is running
+        self.cam_act.setEnabled(drone_running)
+        self.detect_act.setEnabled(drone_running)
+        self.land_button.setEnabled(drone_running) # Land requires connection
+
 
 
 
@@ -977,30 +1113,47 @@ class Mainwindow(QMainWindow):
 
     def connect_drone(self):
         print(">> [Command] Attempting to connect to drone...")
-        proc = subprocess.Popen(
+        self.drone_proc = subprocess.Popen(
             ["execs/tello_driver"]          # or "my_program.exe" on Windows
         )
         time.sleep(0.5)  # Give it a moment to start
-        if proc.poll() is None:
+        if self.drone_proc.poll() is None:
             print("Tello Driver started successfully.")
         else:
             print("Failed to start Tello Driver.")
+        
+        self.update_ui_state()
 
     def check_status(self):
         print(">> [Command] Checking drone status...")
+        self.update_ui_state()
+        
+        # Collect processes
+        procs = {
+            "Tello Driver (Drone)": self.drone_proc,
+            "Mission Planner": self.mission_proc,
+            "Person Detection (Yolo)": self.yolo_proc,
+            "Video Streamer": self.stream_proc,
+            "Camera Viewer (UI)": self.camera_proc,
+        }
+        
+        dlg = StatusDialog(self, procs)
+        dlg.exec()
 
 
     def start_mission(self):
 
         print(">> [Command] Starting  mission...")
-        proc = subprocess.Popen(
+        self.mission_proc = subprocess.Popen(
             ["execs/mission_planner"]          
         )
         time.sleep(0.5)  # Give it a moment to start
-        if proc.poll() is None:
+        if self.mission_proc.poll() is None:
             print("Mission Planner started successfully.")
         else:
             print("Failed to start Mission Planner.")
+        
+        self.update_ui_state()
 
     def toggle_camera(self):
 
