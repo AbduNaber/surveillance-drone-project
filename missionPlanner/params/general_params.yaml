@@ -1,18 +1,19 @@
 grid:
-  width: 336
-  height: 207
+  width:  52 #336
+  height: 39 #207
   cell_size: 10
 
 map:
-  map_file: "/home/abdu/surveillance_drone_project/missionPlanner/okul-map.svg"
+  map_file: "/home/abdu/surveillance_drone_project/missionPlanner/oda.svg"
   resolution: 0.20 # meters per pixel
+  inflation_radius: 1
 
 path_planning:
-  max_jump_distance: 100000
+  max_jump_distance: 50
 
 drone:
   speed: 10.0
   turn_rate: 30.0
   initial_yaw_rad: 0.0
-  dead_zone_deg: 5
+  dead_zone_deg: 1
   takeoff_altitude_cm: 50

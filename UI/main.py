@@ -377,7 +377,7 @@ class Mainwindow(QMainWindow):
         self.drone_item_visual = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/drone_point.svg")
         self.scene.addItem(self.drone_item_visual)
         self.drone_item_visual.setZValue(100) # High Z value to be on top
-        self.drone_item_visual.setScale(20)  # Scale down if too big
+        self.drone_item_visual.setScale(5)  # Scale down if too big burayı değiştirebilirsin
         # Center the item (approximation, better if we knew SVG size)
         # Using a fixed offset if we assume the icon is roughly centered in its viewbox
         # or we just rely on its own coordinate system.
@@ -479,7 +479,7 @@ class Mainwindow(QMainWindow):
         self.view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.view.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
-        self.map_item = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/missionPlanner/okul-map.svg")
+        self.map_item = QGraphicsSvgItem(self.default_map_path)
         # Optional: prevent SVG from stealing clicks
         self.map_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
 
@@ -725,7 +725,7 @@ class Mainwindow(QMainWindow):
 
     # ================= WAYPOINTS =================
     def add_waypoint(self, pos, label, color):
-        size = 5000
+        size = 500 # burayı değiştirebilirsin
 
         path = QPainterPath()
         path.addEllipse(-size / 4, -size / 2, size / 2, size / 2)
@@ -841,11 +841,13 @@ class Mainwindow(QMainWindow):
         self.draw_path(path)
 
     def draw_path(self, path):
+        print(f"[UI] Drawing path with {len(path)} points")
+        print(path)
         if not path or len(path) < 2:
             return
 
         pen = QPen(Qt.GlobalColor.green)
-        pen.setWidth(50)
+        pen.setWidth(5) # burayı değiştirebilirsin
 
         for i in range(len(path) - 1):
             x1, y1 = self.grid_to_scene(path[i]["x"], path[i]["y"])

@@ -33,6 +33,7 @@ struct appParams
     {
         std::string map_file;
         double resolution; // meters per pixel
+        int inflation_radius; // in cells
     } map;
 
     struct PathPlanningParams

@@ -53,7 +53,53 @@ void loadSvgToGrid(const char *filename, gridMap &map, double cellSize)
 
     std::cout << "Loading SVG file: " << filename << std::endl;
 
-    GridMapContext context(map, cellSize);
+    // --- Dynamic Scale Calculation ---
+    double svgWidth = 0.0;
+    double svgHeight = 0.0;
+    
+    // Try to parse viewBox first as it defines the coordinate system
+    auto viewBoxAttr = root->first_attribute("viewBox");
+    if (viewBoxAttr) {
+        std::string viewBoxStr = viewBoxAttr->value();
+        std::stringstream ss(viewBoxStr);
+        double minX, minY, w, h;
+        ss >> minX >> minY >> w >> h;
+        svgWidth = w;
+        svgHeight = h;
+        std::cout << "Parsed viewBox: " << minX << " " << minY << " " << w << " " << h << std::endl;
+    } else {
+        // Fallback to width/height attributes (simple parsing)
+        auto widthAttr = root->first_attribute("width");
+        auto heightAttr = root->first_attribute("height");
+        if (widthAttr && heightAttr) {
+            try {
+                svgWidth = std::stod(widthAttr->value());
+                svgHeight = std::stod(heightAttr->value());
+            } catch (...) {}
+        }
+    }
+
+    double loadingScale = cellSize; // Default fallback
+    if (svgWidth > 0 && svgHeight > 0) {
+        double gridW = map.getWidth();
+        double gridH = map.getHeight();
+        
+        double scaleX = svgWidth / gridW;
+        double scaleY = svgHeight / gridH;
+        
+        // Use the larger scale to ensure everything fits (or smaller? usually larger divider means "1 grid cell = N svg units")
+        // If we want the whole map to fit in the grid: 
+        // 1 grid cell covers (SVG_Dimension / Grid_Dimension) units.
+        loadingScale = std::max(scaleX, scaleY);
+        
+        std::cout << "Detected SVG Dimensions: " << svgWidth << "x" << svgHeight << "\n";
+        std::cout << "Grid Dimensions: " << gridW << "x" << gridH << "\n";
+        std::cout << "Calculated Loading Scale (Cell Size): " << loadingScale << "\n";
+    } else {
+        std::cout << "Could not detect SVG dimensions, using configured cell size: " << cellSize << "\n";
+    }
+
+    GridMapContext context(map, loadingScale);
     
     using namespace svgpp;
     document_traversal<
@@ -130,6 +176,7 @@ void loadParams(const std::string &paramFile, appParams &params)
 
     params.map.map_file = config["map"]["map_file"].as<std::string>(); 
     params.map.resolution = config["map"]["resolution"].as<double>();
+    params.map.inflation_radius = config["map"]["inflation_radius"].as<int>();
 
     params.path_planning.max_jump_distance = config["path_planning"]["max_jump_distance"].as<int>();
     params.drone.speed = config["drone"]["speed"].as<double>();
@@ -143,19 +190,47 @@ void getWaypointsFromUI(gridMap &map, coordinate &startCoord, coordinate &endCoo
 {
     // connect to UI with tcp sock.connect(("127.0.0.1", 5555)) get waypoints
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    
+    int opt = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
+        perror("setsockopt");
+    }
 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(5555);
     std::cout << "Waiting for waypoints from UI on port 5555..." << std::endl;
-    bind(server_fd, (sockaddr*)&addr, sizeof(addr));
-    listen(server_fd, 1);
+    
+    if (bind(server_fd, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind failed");
+        close(server_fd);
+        return;
+    }
+    
+    if (listen(server_fd, 1) < 0) {
+        perror("listen");
+        close(server_fd);
+        return;
+    }
 
     int client = accept(server_fd, nullptr, nullptr);
+    if (client < 0) {
+        perror("accept");
+        close(server_fd);
+        return;
+    }
+    std::cout << "Client connected!" << std::endl;
 
     char buffer[4096] = {};
-    read(client, buffer, sizeof(buffer));
+    int bytesRead = read(client, buffer, sizeof(buffer));
+    std::cout << "Read " << bytesRead << " bytes from client." << std::endl;
+    if (bytesRead <= 0) {
+         std::cerr << "Failed to read data or empty." << std::endl;
+         close(client);
+         close(server_fd);
+         return;
+    }
 
     json data = json::parse(buffer);
 
@@ -256,7 +331,7 @@ int main()
     coordinate startCoord{};
     coordinate endCoord{};
 
-    map.inflateObstacles(5); // Inflate obstacles by 5 cells   
+    map.inflateObstacles(params.map.inflation_radius); // Inflate obstacles by 5 cells   
     PathFinder pathFinder;
  
     while (1){
@@ -282,9 +357,9 @@ int main()
         return 1;
     }
 
-    // for (int y = 0; y < gridSize; ++y)
+    // for (int y = 0; y < gridHeight; ++y)
     // {
-    //     for (int x = 0; x < gridSize; ++x)
+    //     for (int x = 0; x < gridWidth; ++x)
     //     {
     //         coordinate coord{ x, y };
     //         if (map.isPath(coord))       outfile << "+"; // Yol en üstte görünsün

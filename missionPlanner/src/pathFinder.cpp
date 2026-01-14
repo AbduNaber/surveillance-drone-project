@@ -2,13 +2,7 @@
 
 using json = nlohmann::json;
 
-static double normalizeAngle(double a) {
-  while (a > M_PI)
-    a -= 2 * M_PI;
-  while (a < -M_PI)
-    a += 2 * M_PI;
-  return a;
-}
+
 
 void PathFinder::findPath(gridMap &map, coordinate start, coordinate end) {
   // trivial cases
@@ -330,6 +324,35 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
     if (forwardCm > 0) {
         pushOrMerge(CMD_MOVE_FORWARD, forwardCm);
     }
+  }
+
+  // ---- Comeback Logic ----
+  // Traverse the path in reverse order: from end to start
+  for (size_t i = path.size() - 1; i > 0; --i) {
+      double dx = path[i - 1].x - path[i].x;
+      double dy = path[i - 1].y - path[i].y;
+
+      double distCm = std::hypot(dx, dy) * params.grid.cell_size;
+      int forwardCm = static_cast<int>(std::lround(distCm));
+
+      double targetYaw = std::atan2(dy, dx);
+      double deltaYaw = normalizeAngle(targetYaw - currentYaw);
+      int turnDeg = static_cast<int>(std::lround(deltaYaw * 180.0 / M_PI));
+
+      // ---- Rotation ----
+      if (turnDeg > params.drone.dead_zone_deg || turnDeg < -params.drone.dead_zone_deg){ 
+          if (turnDeg > 0) {
+              pushOrMerge(CMD_ROTATE_CCW, turnDeg);
+          } else if (turnDeg < 0) {
+              pushOrMerge(CMD_ROTATE_CW, -turnDeg);
+          }
+          currentYaw = targetYaw;
+      }
+
+      // ---- Forward ----
+      if (forwardCm > 0) {
+          pushOrMerge(CMD_MOVE_FORWARD, forwardCm);
+      }
   }
   commands.push_back(
       std::map<DroneCommand, std::string>{{CMD_LAND, ""}});
