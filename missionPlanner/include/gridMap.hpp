@@ -7,7 +7,7 @@ class gridMap
 {
 public:
     // Constructor
-    gridMap(int size);
+    gridMap(int width, int height);
 
     // Setters
     void setBlocked(const coordinate &c);
@@ -22,10 +22,12 @@ public:
     bool isEnd(const coordinate &c) const;
     bool isPath(const coordinate &c) const;
     void inflateObstacles(int radius);
-    int getSize() const;
+    int getWidth() const;
+    int getHeight() const;
 
 private:
-    int size_;
+    int width_;
+    int height_;
     // Assuming 'struct Cell' is defined in common.hpp
     std::vector<std::vector<Cell>> grid_; 
 

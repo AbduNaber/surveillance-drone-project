@@ -1,14 +1,14 @@
 grid:
-  width: 200
-  height: 200
-  cell_size: 20
+  width: 336
+  height: 207
+  cell_size: 10
 
 map:
-  map_file: "/home/abdu/surveillance_drone_project/UI/assets/map.svg"
-  resolution: 0.025 # meters per pixel
+  map_file: "/home/abdu/surveillance_drone_project/missionPlanner/okul-map.svg"
+  resolution: 0.20 # meters per pixel
 
 path_planning:
-  max_jump_distance: 10
+  max_jump_distance: 100000
 
 drone:
   speed: 10.0

@@ -1,8 +1,8 @@
 #include "gridMap.hpp"
 
-gridMap::gridMap(int size) : size_(size)
+gridMap::gridMap(int width, int height) : width_(width), height_(height)
 {
-    grid_.resize(size_, std::vector<Cell>(size_));
+    grid_.resize(height_, std::vector<Cell>(width_));
 }
 
 void gridMap::setBlocked(const coordinate &c)
@@ -103,21 +103,26 @@ void gridMap::clear(const coordinate &c)
     }
 }
 
-int gridMap::getSize() const
+int gridMap::getWidth() const
 {
-    return size_;
+    return width_;
+}
+
+int gridMap::getHeight() const
+{
+    return height_;
 }
 
 
 bool gridMap::isValid(int x, int y) const {
-    return (x >= 0 && x < size_ && y >= 0 && y < size_);
+    return (x >= 0 && x < width_ && y >= 0 && y < height_);
 }
 
 void gridMap::clearPath()
 {
-    for (int y = 0; y < size_; ++y)
+    for (int y = 0; y < height_; ++y)
     {
-        for (int x = 0; x < size_; ++x)
+        for (int x = 0; x < width_; ++x)
         {
             grid_[y][x].isPath = false;
         }
@@ -128,8 +133,8 @@ void gridMap::clearPath()
 void gridMap::inflateObstacles(int radius) {
     std::vector<coordinate> toBlock;
 
-    for (int y = 0; y < size_; ++y) {
-        for (int x = 0; x < size_; ++x) {
+    for (int y = 0; y < height_; ++y) {
+        for (int x = 0; x < width_; ++x) {
             coordinate c{x, y};
             if (!isBlocked(c)) continue;
 

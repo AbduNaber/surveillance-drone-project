@@ -1,3 +1,4 @@
+import yaml
 import sys
 import cv2
 import json
@@ -188,12 +189,28 @@ class Mainwindow(QMainWindow):
 
         
         self.setAcceptDrops(True)
-        self.default_map_path = "/Users/esin/drone projemiz/src/assets/map.svg"
+        self.default_map_path = "/home/abdu/surveillance_drone_project/missionPlanner/okul-map.svg"
 
         # ===== GRID CONFIG (MUST MATCH YAML) =====
-        self.grid_width = 200
-        self.grid_height = 200
-        self.cell_size = 20  # world units per cell
+        try:
+            with open("/home/abdu/surveillance_drone_project/missionPlanner/params/general_params.yaml", "r") as f:
+                params = yaml.safe_load(f)
+                self.grid_width = params["grid"]["width"]
+                self.grid_height = params["grid"]["height"]
+                self.cell_size = params["grid"]["cell_size"]
+                
+                # Load Map Path from Params
+                map_file_param = params.get("map", {}).get("map_file")
+                if map_file_param:
+                    self.default_map_path = map_file_param
+                    print(f"[UI] Loaded map path: {self.default_map_path}")
+                
+                print(f"[UI] Loaded params: {self.grid_width}x{self.grid_height}, cell: {self.cell_size}")
+        except Exception as e:
+            print(f"[UI] ERROR loading params: {e}. Using defaults.")
+            self.grid_width = 200
+            self.grid_height = 200
+            self.cell_size = 20
         # ==========================================
         # 2. ADIM: Sonra Matrisi Oluştur
         # ==========================================
@@ -201,9 +218,14 @@ class Mainwindow(QMainWindow):
         
         # TEST İÇİN: Haritanın ortasına sanal bir duvar koyalım.
         # Bu koordinata tıkladığında pointer koymaması gerekir.
-        for y in range(90, 110):
-            for x in range(90, 110):
-                self.grid_matrix[y][x] = 1  # 1 = Duvar
+        # Ensure test wall is within bounds
+        safe_y_start = min(90, self.grid_height - 10)
+        safe_x_start = min(90, self.grid_width - 10)
+        if safe_y_start > 0 and safe_x_start > 0:
+             for y in range(safe_y_start, safe_y_start + 20):
+                for x in range(safe_x_start, safe_x_start + 20):
+                    if y < self.grid_height and x < self.grid_width:
+                        self.grid_matrix[y][x] = 1  # 1 = Duvar
 
         self.setWindowTitle("Drone Mission Planning Interface")
         self.setGeometry(200, 200, 1400, 900)
@@ -244,7 +266,7 @@ class Mainwindow(QMainWindow):
         self.drone_x = 0.0
         self.drone_y = 0.0
         self.drone_yaw = 0.0 # Degrees
-        self.drone_scale = 20000  # pixels per meter (approx)
+        #self.drone_scale = 20000  # pixels per meter (approx)
         self.trajectory_initialized = False
         self.low_battery_warned = False
 
@@ -253,7 +275,7 @@ class Mainwindow(QMainWindow):
         self.drone_item_visual = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/drone_point.svg")
         self.scene.addItem(self.drone_item_visual)
         self.drone_item_visual.setZValue(100) # High Z value to be on top
-        self.drone_item_visual.setScale(3)  # Scale down if too big
+        self.drone_item_visual.setScale(20)  # Scale down if too big
         # Center the item (approximation, better if we knew SVG size)
         # Using a fixed offset if we assume the icon is roughly centered in its viewbox
         # or we just rely on its own coordinate system.
@@ -353,7 +375,7 @@ class Mainwindow(QMainWindow):
         self.view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.view.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
 
-        self.map_item = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/map.svg")
+        self.map_item = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/missionPlanner/okul-map.svg")
         # Optional: prevent SVG from stealing clicks
         self.map_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
 
@@ -567,7 +589,7 @@ class Mainwindow(QMainWindow):
 
     # ================= WAYPOINTS =================
     def add_waypoint(self, pos, label, color):
-        size = 500
+        size = 5000
 
         path = QPainterPath()
         path.addEllipse(-size / 4, -size / 2, size / 2, size / 2)
@@ -596,30 +618,24 @@ class Mainwindow(QMainWindow):
         
         # [FEATURE] Teleport drone to Waypoint A
         if label == "A":
-            # Reverse-engineer get position:
-            # final_x = center_x + sx
-            # center_x + (x_m * scale) = pos.x
-            # x_m * scale = pos.x - center_x
-            # x_m = (pos.x - center_x) / scale
-            
-            center_x = self.map_width_scene / 2
-            center_y = self.map_height_scene / 2
-            
-            # Note: pos.x() is what we used for setPos
-            # We want to find new drone_x, drone_y
-            
-            rx = pos.x() - center_x
-            ry = pos.y() - center_y
-            
-            # sx = rx
-            # sy = ry 
-            # recall: sy = -y_m * scale => y_m = -sy / scale
-            
-            new_drone_x = rx / self.drone_scale
-            new_drone_y = -ry / self.drone_scale # coordinate flip
-            
-            print(f"[UI] Teleporting drone to A: ({new_drone_x:.2f}, {new_drone_y:.2f})")
-            
+            # 1. Scene → Grid
+            gx, gy = self.scene_to_grid(pos)
+
+            # 2. Grid → World (cm)
+            world_x_cm = gx * self.cell_size
+            world_y_cm = gy * self.cell_size
+
+            # 3. World (cm) → meters
+            new_drone_x = world_x_cm / 100.0
+            new_drone_y = world_y_cm / 100.0
+
+            print(
+                f"[UI] Teleporting drone to A | "
+                f"Grid=({gx},{gy}) "
+                f"World=({world_x_cm:.1f}cm,{world_y_cm:.1f}cm)"
+            )
+
+            # 4. Set state and update visualization
             self.drone_x = new_drone_x
             self.drone_y = new_drone_y
             self.update_drone_position(self.drone_x, self.drone_y)
@@ -693,7 +709,7 @@ class Mainwindow(QMainWindow):
             return
 
         pen = QPen(Qt.GlobalColor.green)
-        pen.setWidth(5)
+        pen.setWidth(50)
 
         for i in range(len(path) - 1):
             x1, y1 = self.grid_to_scene(path[i]["x"], path[i]["y"])
@@ -803,6 +819,8 @@ class Mainwindow(QMainWindow):
             # Create new pin
             
             pin = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/person_icon.svg")
+
+            
             
             # Optional: Scale pin if needed, e.g. pin.setScale(0.5)
             # pin.setFlags(QGraphicsSvgItem.GraphicsItemFlag.ItemIgnoresTransformations)
@@ -811,8 +829,20 @@ class Mainwindow(QMainWindow):
             pin.setPos(pos)
             pin.setZValue(200) # Below drone, above map
             
-            # Center alignment attempt (if SVG bounds known)
+            PERSON_RADIUS_CM = 25  # half meter diameter
+
+
+            scene_per_cm_x = self.map_width_scene / (self.grid_width * self.cell_size)
+            scene_per_cm_y = self.map_height_scene / (self.grid_height * self.cell_size)
+
+            scene_per_cm = min(scene_per_cm_x, scene_per_cm_y)
+
+            target_scene_size = PERSON_RADIUS_CM * 2 * scene_per_cm
+
             b = pin.boundingRect()
+            scale = target_scene_size / max(b.width(), b.height())
+            pin.setScale(scale)
+
             pin.setTransformOriginPoint(b.center())
               
             # Center the item on the position by offsetting
@@ -884,50 +914,37 @@ class Mainwindow(QMainWindow):
             self.drone_item_visual.setRotation(self.drone_yaw)
             
     def update_drone_position(self, x_m, y_m):
-        # Scale logic: Assuming x_m, y_m are in meters.
-        # Main map logic: 20 pixels = 1 unit? 
-        # self.cell_size = 20 # world units per cell?? No, comment says "world units per cell".
-        # Let's check grid_to_scene. 
-        # world_x = gx * cell_size
-        # Actually, let's look at scene_to_grid.
-        # The map seems to be purely visual with grid overlay.
-        # Let's try to just use a scaling factor similar to test.py but adapted to visibility.
-        # test.py used scale=1000.
-        # Here we have a map. Let's assume the drone starts at the center or 0,0 corresponds to a point.
-        # For now, I'll use a direct visual scale.
-        
-        scale = self.drone_scale
-        
-        # In test.py: sy = -y_m * scale.
-        sx = x_m * scale
-        sy = -y_m * scale 
+        # 1. meters → centimeters
+        x_cm = x_m * 100.0
+        y_cm = y_m * 100.0
+
+        # 2. centimeters → grid (float, not int!)
+        gx = x_cm / self.cell_size
+        gy = y_cm / self.cell_size
+
+        # 3. grid → scene
+        sx = (gx / self.grid_width)  * self.map_width_scene
+        sy = (gy / self.grid_height) * self.map_height_scene
 
         if not self.drone_item_visual.isVisible():
-             self.drone_item_visual.show()
+            self.drone_item_visual.show()
 
-        # We probably want to offset this to a starting position on the map if we knew it.
-        # For now, relative to (0,0) of the scene (top-left of map typically, but sceneRect might be adjusted).
-        # The map scene rect is set to bounds of svg.
-        # Let's assume start at center of map for visibility if 0,0 is top left.
-        
-        center_x = self.map_width_scene / 2
-        center_y = self.map_height_scene / 2
-        
-        final_x = center_x + sx
-        final_y = center_y + sy
+        # Center icon
+        bounds = self.drone_item_visual.boundingRect()
+        self.drone_item_visual.setPos(
+            sx - bounds.width() / 2,
+            sy - bounds.height() / 2
+        )
 
-        # Adjust for icon size so 'pos' is center
-        d_bounds = self.drone_item_visual.boundingRect()
-        self.drone_item_visual.setPos(final_x - d_bounds.width()/2, final_y - d_bounds.height()/2)
-
-        # Tracjectory
+        # Trajectory
         if not self.trajectory_initialized:
-            self.trajectory_path.moveTo(final_x, final_y)
+            self.trajectory_path.moveTo(sx, sy)
             self.trajectory_initialized = True
         else:
-            self.trajectory_path.lineTo(final_x, final_y)
+            self.trajectory_path.lineTo(sx, sy)
 
         self.trajectory_item.setPath(self.trajectory_path)
+
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():

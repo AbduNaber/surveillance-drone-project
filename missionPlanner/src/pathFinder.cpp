@@ -308,8 +308,8 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
     double dx = path[i + 1].x - path[i].x;
     double dy = path[i + 1].y - path[i].y;
 
-    double distM = std::hypot(dx, dy) * params.map.resolution;
-    int forwardCm = static_cast<int>(std::lround(distM * 100.0));
+    double distCm = std::hypot(dx, dy) * params.grid.cell_size;
+    int forwardCm = static_cast<int>(std::lround(distCm));
 
 
     double targetYaw = std::atan2(dy, dx);

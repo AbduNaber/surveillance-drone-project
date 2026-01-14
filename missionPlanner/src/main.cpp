@@ -74,18 +74,19 @@ void exportToSVG(const gridMap &map, const std::string &filename, int cellSize)
         return;
     }
 
-    int size = map.getSize();
-    int width = size * cellSize;
-    int height = size * cellSize;
+    int width = map.getWidth();
+    int height = map.getHeight();
+    int imgWidth = width * cellSize;
+    int imgHeight = height * cellSize;
 
     // SVG Header
     file << "<svg xmlns='http://www.w3.org/2000/svg' width='" 
-         << width << "' height='" << height 
-         << "' viewBox='0 0 " << width << " " << height << "'>\n";
+         << imgWidth << "' height='" << imgHeight 
+         << "' viewBox='0 0 " << imgWidth << " " << imgHeight << "'>\n";
 
     // Draw grid cells
-    for (int y = 0; y < size; ++y) {
-        for (int x = 0; x < size; ++x) {
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
 
             std::string color = "white";
 
@@ -240,12 +241,13 @@ int main()
     loadParams("/home/abdu/surveillance_drone_project/missionPlanner/params/general_params.yaml", params);
 
     const char *filename = params.map.map_file.c_str();
-    const int gridSize = params.grid.width; 
+    const int gridWidth = params.grid.width; 
+    const int gridHeight = params.grid.height;
     const double cellSize = params.grid.cell_size;
     const int maxJumpCells = params.path_planning.max_jump_distance;
     
     // Grid oluştur
-    gridMap map(gridSize);
+    gridMap map(gridWidth, gridHeight);
 
     // SVG'yi yükle ve engelleri/başlangıç/bitiş noktalarını işle
     loadSvgToGrid(filename, map, cellSize);
@@ -264,7 +266,7 @@ int main()
     getWaypointsFromUI(map, startCoord, endCoord);
     std::cout << "Start Coord: (" << startCoord.x << ", " << startCoord.y << ")\n";
     std::cout << "End Coord: (" << endCoord.x << ", " << endCoord.y << ")\n";
-    std::cout << "Grid Size: " << map.getSize() << std::endl;
+    std::cout << "Grid Size: " << map.getWidth() << "x" << map.getHeight() << std::endl;
     
     // Eğer SVG'den start/end okuyabildiysek yolu bul
    
