@@ -277,7 +277,7 @@ class LogStream(QObject):
 class Mainwindow(QMainWindow):
 
     path_received = pyqtSignal(list)
-    drone_update = pyqtSignal(float, float)
+    drone_update = pyqtSignal(float, float, float)
     person_detected = pyqtSignal(dict)
     battery_update = pyqtSignal(int)
 
@@ -367,7 +367,9 @@ class Mainwindow(QMainWindow):
         # ===== DRONE STATE =====
         self.drone_x = 0.0
         self.drone_y = 0.0
-        self.drone_yaw = 0.0 # Degrees
+        self.telemetry_yaw = 0.0 
+        self.yaw_offset = 0.0
+        # self.drone_yaw = 0.0 # Deprecated in favor of telemetry + offset
         #self.drone_scale = 20000  # pixels per meter (approx)
         self.trajectory_initialized = False
         self.low_battery_warned = False
@@ -461,8 +463,15 @@ class Mainwindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.yaw_dock)
 
     def on_yaw_slider_change(self, value):
-        self.yaw_label.setText(f"Drone Angle: {value}°")
-        self.set_drone_yaw(value)
+        self.yaw_label.setText(f"Drone Angle Offset: {value}°")
+        self.yaw_offset = float(value)
+        self._update_visual_rotation()
+
+    def _update_visual_rotation(self):
+        # Combined rotation
+        final_yaw = self.telemetry_yaw + self.yaw_offset
+        if self.drone_item_visual:
+            self.drone_item_visual.setRotation(final_yaw)
 
     def append_log(self, text):
         # İmleci sona taşı ve metni ekle
@@ -897,17 +906,19 @@ class Mainwindow(QMainWindow):
                 vgy = msg.get("vgy", 0)
                 yaw_deg = msg.get("yaw", 0)
 
-                vx = vgx / 100.0
-                vy = vgy / 100.0
-                yaw = math.radians(yaw_deg)
+                vx = vgx / 100
+                vy = vgy / 100
+                # Tello Yaw 0 is North (Up), but Math 0 is East (Right).
+                # So we subtract 90 degrees for movement calculation.
+                yaw_math = math.radians(yaw_deg - 90)
 
-                wx = vx * math.cos(yaw) - vy * math.sin(yaw)
-                wy = vx * math.sin(yaw) + vy * math.cos(yaw)
+                wx = vx * math.cos(yaw_math) - vy * math.sin(yaw_math)
+                wy = vx * math.sin(yaw_math) + vy * math.cos(yaw_math)
 
                 self.drone_x += wx * dt
                 self.drone_y += wy * dt
 
-                self.drone_update.emit(self.drone_x, self.drone_y)
+                self.drone_update.emit(self.drone_x, self.drone_y, float(yaw_deg))
                 self.battery_update.emit(int(msg.get("bat", 0)))
                 #print("state ok")
 
@@ -1030,12 +1041,10 @@ class Mainwindow(QMainWindow):
         Manually updates the drone's rotation (Dead Reckoning).
         This is called by the permission dialog to simulate rotation immediately.
         """
-        self.drone_yaw += delta_deg
-        # Optimize or Normalize? Tello uses degrees.
-        # self.drone_yaw %= 360 # Optional
+        # For dead reckoning, we can update telemetry_yaw directly
+        self.telemetry_yaw += delta_deg
         
-        if self.drone_item_visual:
-            self.drone_item_visual.setRotation(self.drone_yaw)
+        self._update_visual_rotation()
         
         # Sync slider if exists
         if hasattr(self, "yaw_slider"):
@@ -1047,11 +1056,13 @@ class Mainwindow(QMainWindow):
         """
         Sets the absolute rotation of the drone (Calibration).
         """
-        self.drone_yaw = angle
-        if self.drone_item_visual:
-            self.drone_item_visual.setRotation(self.drone_yaw)
+        # This function might be deprecated or used for hard-reset. 
+        # If used for calibration, it should set offset.
+        # But let's assume it sets the base telemetry value if called programmatically.
+        self.telemetry_yaw = angle
+        self._update_visual_rotation()
             
-    def update_drone_position(self, x_m, y_m):
+    def update_drone_position(self, x_m, y_m, yaw_deg=0.0):
         # 1. meters → centimeters
         x_cm = x_m * 100.0
         y_cm = y_m * 100.0
@@ -1063,6 +1074,10 @@ class Mainwindow(QMainWindow):
         # 3. grid → scene
         sx = (gx / self.grid_width)  * self.map_width_scene
         sy = (gy / self.grid_height) * self.map_height_scene
+
+        # Update yaw state and visual
+        self.telemetry_yaw = yaw_deg
+        self._update_visual_rotation()
 
         if not self.drone_item_visual.isVisible():
             self.drone_item_visual.show()
