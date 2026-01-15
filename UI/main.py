@@ -14,9 +14,10 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QGraphicsView, QGraphicsScene,
     QGraphicsPathItem, QMessageBox, QDockWidget, QTextEdit,
     QDialog, QVBoxLayout, QLabel, QSpinBox, QPushButton, QHBoxLayout,
-    QSlider, QTableWidget, QTableWidgetItem, QHeaderView
+    QSlider, QTableWidget, QTableWidgetItem, QHeaderView,
+    QListWidget, QListWidgetItem
 )
-from PyQt6.QtGui import QPainter, QPen, QBrush, QPainterPath, QColor
+from PyQt6.QtGui import QPainter, QPen, QBrush, QPainterPath, QColor, QIcon
 from PyQt6.QtCore import Qt, QEvent, pyqtSignal, QObject, pyqtSlot
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 
@@ -176,13 +177,7 @@ class RotationControlDialog(QDialog):
         val = self.spin_val.value()
         msg = {"action": "rotate", "direction": direction, "value": val}
         
-        # PREDICTIVE UPDATE (Dead Reckoning)
-        try:
-            if self.parent():
-                step = val if direction == "CW" else -val
-                self.parent().apply_rotation(step)
-        except Exception as e:
-            print(f"Predicitive rotation error: {e}")
+
 
         try:
             # Disable buttons while rotating
@@ -280,6 +275,8 @@ class Mainwindow(QMainWindow):
     drone_update = pyqtSignal(float, float, float)
     person_detected = pyqtSignal(dict)
     battery_update = pyqtSignal(int)
+    commands_received = pyqtSignal(list)
+    command_status_update = pyqtSignal(int, str)
 
     def __init__(self):
         super().__init__()
@@ -341,18 +338,56 @@ class Mainwindow(QMainWindow):
         # Keep track of path line items so we can clear them cleanly
         self.path_items = []
         self.person_items = {}
+        self.person_items = {} # track_id -> item
+        
+        # Command tracking
+        self.mission_commands = [] # List of dicts {cmd, val, status, item}
 
+        # ===== DRONE STATE =====
+        self.drone_x = 0.0
+        self.drone_y = 0.0
+        self.telemetry_yaw = 0.0 
+        self.yaw_offset = 0.0
+        self.trajectory_initialized = False
+        self.low_battery_warned = False
+
+        # Setup UI
         self.setup_map()
         self.setup_log_dock()
         self.setup_yaw_slider()
         self.setup_top_toolbar()
         self.setup_main_toolbar()
+        self.log_dock.setWidget(self.log_text)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.log_dock)
 
+        # --- Command Status Dock ---
+        # --- Command Status Dock ---
+        self.cmd_dock = QDockWidget("Mission Commands", self)
+        self.cmd_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.LeftDockWidgetArea)
+        
+        cmd_container = QWidget()
+        cmd_layout = QVBoxLayout()
+        cmd_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.cmd_list = QListWidget()
+        cmd_layout.addWidget(self.cmd_list)
+        
+        self.clear_cmd_btn = QPushButton("Clear Commands")
+        self.clear_cmd_btn.setStyleSheet("background-color: #f44336; color: white; font-weight: bold;")
+        self.clear_cmd_btn.clicked.connect(self.clear_commands)
+        cmd_layout.addWidget(self.clear_cmd_btn)
+        
+        cmd_container.setLayout(cmd_layout)
+        self.cmd_dock.setWidget(cmd_container)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.cmd_dock)
+        
         # ✅ connect signal to UI function (runs on Qt main thread)
         self.path_received.connect(self.on_path_received)
         self.drone_update.connect(self.update_drone_position)
-        self.person_detected.connect(self.on_person_detected)
         self.battery_update.connect(self.on_battery_received)
+        self.person_detected.connect(self.on_person_detected)
+        self.commands_received.connect(self.on_commands_received)
+        self.command_status_update.connect(self.update_command_status)
 
         # ✅ start TCP listener in background
         self.start_path_listener()
@@ -364,22 +399,12 @@ class Mainwindow(QMainWindow):
         self.perm_server.request_received.connect(self.handle_permission_request)
         self.perm_server.start()
         
-        # ===== DRONE STATE =====
-        self.drone_x = 0.0
-        self.drone_y = 0.0
-        self.telemetry_yaw = 0.0 
-        self.yaw_offset = 0.0
-        # self.drone_yaw = 0.0 # Deprecated in favor of telemetry + offset
-        #self.drone_scale = 20000  # pixels per meter (approx)
-        self.trajectory_initialized = False
-        self.low_battery_warned = False
-
         # ===== DRONE ICON =====
         # Uses independent item
         self.drone_item_visual = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/drone_point.svg")
         self.scene.addItem(self.drone_item_visual)
         self.drone_item_visual.setZValue(100) # High Z value to be on top
-        self.drone_item_visual.setScale(5)  # Scale down if too big burayı değiştirebilirsin
+        self.drone_item_visual.setScale(50)  # Scale down if too big burayı değiştirebilirsin
         # Center the item (approximation, better if we knew SVG size)
         # Using a fixed offset if we assume the icon is roughly centered in its viewbox
         # or we just rely on its own coordinate system.
@@ -734,7 +759,7 @@ class Mainwindow(QMainWindow):
 
     # ================= WAYPOINTS =================
     def add_waypoint(self, pos, label, color):
-        size = 500 # burayı değiştirebilirsin
+        size = 5000# burayı değiştirebilirsin
 
         path = QPainterPath()
         path.addEllipse(-size / 4, -size / 2, size / 2, size / 2)
@@ -841,6 +866,8 @@ class Mainwindow(QMainWindow):
                 if payload.get("type") == "path":
                     # ✅ Emit signal (safe), do not touch UI in this thread
                     self.path_received.emit(payload.get("path", []))
+                elif payload.get("type") == "commands":
+                     self.commands_received.emit(payload.get("commands", []))
 
         threading.Thread(target=server, daemon=True).start()
 
@@ -856,7 +883,7 @@ class Mainwindow(QMainWindow):
             return
 
         pen = QPen(Qt.GlobalColor.green)
-        pen.setWidth(5) # burayı değiştirebilirsin
+        pen.setWidth(50) # burayı değiştirebilirsin
 
         for i in range(len(path) - 1):
             x1, y1 = self.grid_to_scene(path[i]["x"], path[i]["y"])
@@ -989,7 +1016,7 @@ class Mainwindow(QMainWindow):
             target_scene_size = PERSON_RADIUS_CM * 2 * scene_per_cm
 
             b = pin.boundingRect()
-            scale = target_scene_size / max(b.width(), b.height())
+            scale =50
             pin.setScale(scale)
 
             pin.setTransformOriginPoint(b.center())
@@ -1130,9 +1157,19 @@ class Mainwindow(QMainWindow):
 
     def connect_drone(self):
         print(">> [Command] Attempting to connect to drone...")
+        # Redirect stdout/stderr to PIPE to capture output
         self.drone_proc = subprocess.Popen(
-            ["execs/tello_driver"]          # or "my_program.exe" on Windows
+            ["execs/tello_driver"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, # Merge stderr into stdout
+            text=True,
+            bufsize=1 # Line buffered
         )
+        
+        # Start monitoring thread
+        t = threading.Thread(target=self.monitor_drone_output, daemon=True)
+        t.start()
+        
         time.sleep(0.5)  # Give it a moment to start
         if self.drone_proc.poll() is None:
             print("Tello Driver started successfully.")
@@ -1141,6 +1178,145 @@ class Mainwindow(QMainWindow):
         
         self.update_ui_state()
 
+    def monitor_drone_output(self):
+        """Reads stdout of drone driver and updates UI status."""
+        if not self.drone_proc or not self.drone_proc.stdout:
+            return
+
+        command_idx = 0
+        
+        for line in iter(self.drone_proc.stdout.readline, ''):
+            if not line: break
+            line = line.strip()
+            print(f"[DRIVER] {line}") # Debug print
+            
+            # Check for execution start
+            # Check for execution start
+            # Custom tag OR djitellopy log
+            if "[TELLO CMD] Executing command:" in line or "Send command:" in line:
+                 if command_idx < len(self.mission_commands):
+                     self.command_status_update.emit(command_idx, "RUNNING")
+            
+            # Check for success
+            elif "[TELLO CMD] Command OK:" in line or ("Response" in line and "'ok'" in line):
+                 if command_idx < len(self.mission_commands):
+                     self.command_status_update.emit(command_idx, "OK")
+                     command_idx += 1
+            
+            # Check for error
+            elif "[TELLO CMD] Execution Error:" in line or ("Response" in line and "'error'" in line):
+                 if command_idx < len(self.mission_commands):
+                     self.command_status_update.emit(command_idx, "FAIL")
+                     command_idx += 1
+                     
+            elif "Mission aborted by user" in line:
+                 if command_idx < len(self.mission_commands):
+                      self.command_status_update.emit(command_idx, "FAIL")
+                      command_idx += 1
+
+    def on_commands_received(self, commands):
+        self.mission_commands = commands
+        self.cmd_list.clear()
+        
+        print(f"[UI] Received {len(commands)} commands.")
+
+        # Mapping for integer commands (must match C++ enum)
+        cmd_map = {
+            0: "TAKEOFF",
+            1: "LAND",
+            2: "EMERGENCY",
+            3: "MOVE_UP",
+            4: "MOVE_DOWN",
+            5: "MOVE_LEFT",
+            6: "MOVE_RIGHT",
+            7: "MOVE_FORWARD",
+            8: "MOVE_BACK",
+            9: "ROTATE_CW",
+            10: "ROTATE_CCW",
+            11: "STOP",
+            12: "FLIP_LEFT",
+            13: "FLIP_RIGHT",
+            14: "FLIP_FORWARD",
+            15: "FLIP_BACK",
+            16: "SET_SPEED"
+        }
+        
+        for i, cmd in enumerate(commands):
+            raw_cmd = cmd.get("command", "?")
+            
+            # Convert integer to string if possible
+            if isinstance(raw_cmd, int) and raw_cmd in cmd_map:
+                c_name = cmd_map[raw_cmd]
+                cmd["command"] = c_name # Update the dict in place so update_command_status sees the string
+            else:
+                c_name = str(raw_cmd)
+
+            c_val = cmd.get("value", "")
+            text = f"{i+1}. {c_name} ({c_val})"
+            
+            item = QListWidgetItem(text)
+            self.cmd_list.addItem(item)
+            
+    def update_command_status(self, index, status):
+        # index is 0-based index in self.mission_commands
+        if index < 0 or index >= self.cmd_list.count():
+            return
+            
+        item = self.cmd_list.item(index)
+        original_text = item.text().split(" [")[0] # remove old status if any
+        
+        icon = QIcon() # Placeholder
+        
+        if status == "RUNNING":
+            item.setText(f"{original_text} [RUNNING...]")
+            item.setBackground(QBrush(QColor("orange")))
+            item.setForeground(QBrush(QColor("black")))
+        elif status == "OK":
+            item.setText(f"{original_text} [OK]")
+            item.setBackground(QBrush(QColor("green")))
+            item.setForeground(QBrush(QColor("white")))
+
+            if 0 <= index < len(self.mission_commands):
+                cmd_data = self.mission_commands[index]
+                c_name = cmd_data.get("command", "")
+                c_val_str = cmd_data.get("value", "0")
+                try:
+                    c_val = int(c_val_str)
+                except:
+                    c_val = 0
+                
+                # Perform update based on command
+                # Note: self.telemetry_yaw is in degrees.
+                # ZMQ logic uses: math.radians(yaw_deg - 90)
+                
+                updated = False
+                
+                if c_name == "ROTATE_CW":
+                     self.telemetry_yaw += c_val
+                     updated = True
+                elif c_name == "ROTATE_CCW":
+                     self.telemetry_yaw -= c_val
+                     updated = True
+
+                if updated:
+                     self.update_drone_position(self.drone_x, self.drone_y, self.telemetry_yaw) 
+            
+        elif status == "FAIL":
+            item.setText(f"{original_text} [FAILED]")
+            item.setBackground(QBrush(QColor("red")))
+            item.setForeground(QBrush(QColor("white")))
+        elif status == "PENDING":
+             item.setBackground(QBrush(QColor("white")))
+             item.setForeground(QBrush(QColor("black")))
+
+
+    def clear_commands(self):
+        """
+        Clears the mission commands list and the UI list widget.
+        """
+        self.mission_commands = []
+        self.cmd_list.clear()
+        print("[UI] Mission commands cleared.")
     def check_status(self):
         print(">> [Command] Checking drone status...")
         self.update_ui_state()

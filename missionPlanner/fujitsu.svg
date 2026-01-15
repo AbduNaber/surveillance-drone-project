@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="908cm"
+   height="908cm"
+   viewBox="0 0 9080 9080.0001"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.2 (ebf0e94, 2025-05-08)"
+   sodipodi:docname="fujitsu.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#505050"
+     bordercolor="#ffffff"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="1"
+     inkscape:deskcolor="#505050"
+     inkscape:document-units="mm"
+     showgrid="true"
+     inkscape:zoom="0.020489618"
+     inkscape:cx="11713.249"
+     inkscape:cy="20986.238"
+     inkscape:window-width="1920"
+     inkscape:window-height="941"
+     inkscape:window-x="0"
+     inkscape:window-y="27"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1">
+    <inkscape:grid
+       id="grid1"
+       units="cm"
+       originx="0"
+       originy="0"
+       spacingx="100"
+       spacingy="100"
+       empcolor="#0099e5"
+       empopacity="0.30196078"
+       color="#0099e5"
+       opacity="0.14901961"
+       empspacing="5"
+       enabled="true"
+       visible="true" />
+  </sodipodi:namedview>
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 0,0 V 9079.9998"
+       id="path1" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 0,9079.9998 H 9079.9998"
+       id="path2" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 0,0 H 9079.9998"
+       id="path3" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 9079.9998,0 V 9079.9998"
+       id="path4" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="m 1999.9999,999.99995 h 1499.9999 v 0 0 0"
+       id="path5" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 3499.9998,999.99995 V 2999.9998"
+       id="path6" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 3499.9998,2999.9998 H 2465.3431"
+       id="path7" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 6499.9999,5999.9998 H 7999.9998"
+       id="path8" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 6499.9999,5999.9998 V 7578.6474"
+       id="path9" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 7999.9998,7499.9997 H 6499.9999"
+       id="path10" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="m 5478.5402,999.99995 21.4596,1999.99985"
+       id="path11" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 7499.9997,2999.9998 H 5499.9998"
+       id="path12" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 5499.9998,999.99995 H 7499.9997"
+       id="path13" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 1499.9999,4999.9997 H 2999.9998"
+       id="path14" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 2999.9998,4999.9997 V 7449.9996"
+       id="path15" />
+    <path
+       style="fill:#ff0000;stroke:#ff0000;stroke-width:100"
+       d="M 1499.9999,7499.9997 H 2999.9998"
+       id="path16" />
+  </g>
+</svg>

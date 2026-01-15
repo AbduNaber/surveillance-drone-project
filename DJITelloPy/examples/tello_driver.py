@@ -358,7 +358,10 @@ def command_sequence():
                         # djitellopy usually catches internal errors but if it raises, it's serious.
                         # We'll allow continue for now.
                     
-                    time.sleep(0.1)  # small delay between commands
+                    if success:
+                         print(f"[TELLO CMD] Command OK: {command.command}")
+
+                    time.sleep(0.3)  # small delay between commands
                 
                 commands.clear()
                 

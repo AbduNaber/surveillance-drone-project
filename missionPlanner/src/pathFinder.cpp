@@ -413,3 +413,45 @@ int PathFinder::sendPathToUI()
     close(sock);
     return 0;
 }
+int PathFinder::sendCommandsToUI(const std::vector<std::map<DroneCommand, std::string>>& commands)
+{
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+        perror("socket");
+        return -1;
+    }
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(5566);          // UI LISTENS here
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+
+    if (connect(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("connect");
+        close(sock);
+        return -1;
+    }
+
+    // construct payload
+    json payload;
+    payload["type"] = "commands";
+    payload["commands"] = json::array();
+
+    for (const auto& cmdMap : commands) {
+         json cmdJson;
+         // Each map has only one entry usually, but let's iterate
+         for (const auto& pair : cmdMap) {
+             DroneCommand cmd = pair.first;
+             const std::string &value = pair.second;
+             cmdJson["command"] = cmd;
+             cmdJson["value"] = value;
+         }
+         payload["commands"].push_back(cmdJson);
+    }
+
+    std::string msg = payload.dump();
+    send(sock, msg.c_str(), msg.size(), 0);
+
+    close(sock);
+    return 0;
+}

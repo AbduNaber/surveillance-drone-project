@@ -87,6 +87,8 @@ public:
     void updateMap(gridMap &map);
     void printDroneCommands();
     int sendPathToUI();
+    int sendCommandsToUI(const std::vector<std::map<DroneCommand, std::string>>& commands);
+
 private:
 
     std::vector<coordinate> path = {};

@@ -390,6 +390,13 @@ int main()
     } else {
         std::cout << "Path sent to UI successfully." << std::endl;
     }
+
+    if (pathFinder.sendCommandsToUI(pathFinder.getDroneCommands()) != 0) {
+        std::cerr << "Failed to send commands to UI." << std::endl;
+    } else {
+        std::cout << "Commands sent to UI successfully." << std::endl;
+    }
+
     sendCommandsToTello(pathFinder.getDroneCommands());
 
     map.clearPath();
