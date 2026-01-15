@@ -235,7 +235,17 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
       std::map<DroneCommand, std::string>{{CMD_SET_SPEED,
                                          std::to_string(static_cast<int>(params.drone.speed))}});
   // Helper lambda to push or merge commands
-  auto pushOrMerge = [&](DroneCommand cmd, int value) {
+  std::function<void(DroneCommand, int)> pushOrMerge;
+  pushOrMerge = [&](DroneCommand cmd, int value) {
+      if (value <= 0) return;
+
+      // Handle splitting for CMD_MOVE_FORWARD upfront
+      if (cmd == CMD_MOVE_FORWARD && value > 50) {
+          pushOrMerge(cmd, 50);
+          pushOrMerge(cmd, value - 50);
+          return;
+      }
+
       if (commands.empty()) {
           commands.push_back(std::map<DroneCommand, std::string>{{cmd, std::to_string(value)}});
           return;
@@ -243,7 +253,7 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
 
       // Check last command
       auto &lastMap = commands.back();
-      if (lastMap.empty()) { // Should not happen but safety check
+      if (lastMap.empty()) { 
            commands.push_back(std::map<DroneCommand, std::string>{{cmd, std::to_string(value)}});
            return;
       }
@@ -259,10 +269,12 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
               case CMD_MOVE_DOWN:
               case CMD_MOVE_LEFT:
               case CMD_MOVE_RIGHT:
-              case CMD_MOVE_FORWARD:
               case CMD_MOVE_BACK:
               case CMD_ROTATE_CW:
               case CMD_ROTATE_CCW:
+                  mergeable = true;
+                  break;
+              case CMD_MOVE_FORWARD:
                   mergeable = true;
                   break;
               default:
@@ -272,9 +284,24 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
           if (mergeable) {
               try {
                   int oldValue = std::stoi(it->second);
-                  int newValue = oldValue + value;
-                  it->second = std::to_string(newValue);
-                  return; // Merged
+                  
+                  if (cmd == CMD_MOVE_FORWARD) {
+                      // Specific logic for forward: max 50
+                      int space = 50 - oldValue;
+                      if (space > 0) {
+                          int add = std::min(value, space);
+                          it->second = std::to_string(oldValue + add);
+                          int remaining = value - add;
+                          if (remaining > 0) {
+                              pushOrMerge(cmd, remaining);
+                          }
+                          return; 
+                      }
+                      // If space <= 0, fall through to push new
+                  } else {
+                      it->second = std::to_string(oldValue + value);
+                      return; // Merged
+                  }
               } catch (...) {
                   // If conversion fails, just push new
               }
@@ -296,6 +323,8 @@ void PathFinder::buildDroneCommands(const appParams &params, const std::vector<c
   // optimize push logic for UP command as well? User request specifically mentioned "consecutive".
   // The first move up is usually unique, but using the helper is consistent.
   pushOrMerge(CMD_MOVE_UP, params.drone.takeoff_altitude_cm);
+  
+
   
   for (size_t i = 0; i + 1 < path.size(); ++i) {
 
