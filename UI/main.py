@@ -348,13 +348,14 @@ class Mainwindow(QMainWindow):
         self.drone_y = 0.0
         self.telemetry_yaw = 0.0 
         self.yaw_offset = 0.0
+        self.movement_scale = 1.0
         self.trajectory_initialized = False
         self.low_battery_warned = False
 
         # Setup UI
         self.setup_map()
         self.setup_log_dock()
-        self.setup_yaw_slider()
+        self.setup_calibration_dock()
         self.setup_top_toolbar()
         self.setup_main_toolbar()
         self.log_dock.setWidget(self.log_text)
@@ -404,7 +405,7 @@ class Mainwindow(QMainWindow):
         self.drone_item_visual = QGraphicsSvgItem("/home/abdu/surveillance_drone_project/UI/assets/drone_point.svg")
         self.scene.addItem(self.drone_item_visual)
         self.drone_item_visual.setZValue(100) # High Z value to be on top
-        self.drone_item_visual.setScale(50)  # Scale down if too big burayı değiştirebilirsin
+        self.drone_item_visual.setScale(20)  # Scale down if too big burayı değiştirebilirsin
         # Center the item (approximation, better if we knew SVG size)
         # Using a fixed offset if we assume the icon is roughly centered in its viewbox
         # or we just rely on its own coordinate system.
@@ -461,36 +462,55 @@ class Mainwindow(QMainWindow):
         sys.stdout = self.log_stream
         sys.stderr = self.log_stream
 
-    def setup_yaw_slider(self):
+    def setup_calibration_dock(self):
         # Create Dock
-        self.yaw_dock = QDockWidget("Yaw Calibration", self)
-        self.yaw_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea)
+        self.calib_dock = QDockWidget("Calibration", self)
+        self.calib_dock.setAllowedAreas(Qt.DockWidgetArea.RightDockWidgetArea | Qt.DockWidgetArea.BottomDockWidgetArea)
         
         # Widget container
         container = QWidget()
         layout = QVBoxLayout()
         
-        # Label
+        # --- Yaw Calibration ---
         self.yaw_label = QLabel("Drone Angle: 0°")
         layout.addWidget(self.yaw_label)
         
-        # Slider
         self.yaw_slider = QSlider(Qt.Orientation.Horizontal)
         self.yaw_slider.setRange(0, 360)
         self.yaw_slider.setValue(0)
         self.yaw_slider.valueChanged.connect(self.on_yaw_slider_change)
         layout.addWidget(self.yaw_slider)
+
+        layout.addSpacing(20) # Spacer
+        
+        # --- Movement Scale Calibration ---
+        self.scale_label = QLabel(f"Movement Scale: {self.movement_scale:.2f}x")
+        layout.addWidget(self.scale_label)
+        
+        # Slider for 0.1x to 100.0x (steps of 0.1)
+        # Slider int range: 1 to 1000
+        self.scale_slider = QSlider(Qt.Orientation.Horizontal)
+        self.scale_slider.setRange(1, 1000)
+        self.scale_slider.setValue(int(self.movement_scale * 10))
+        self.scale_slider.valueChanged.connect(self.on_scale_slider_change)
+        layout.addWidget(self.scale_slider)
         
         container.setLayout(layout)
-        self.yaw_dock.setWidget(container)
+        self.calib_dock.setWidget(container)
         
         # Add to Bottom Right (Right area)
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.yaw_dock)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.calib_dock)
 
     def on_yaw_slider_change(self, value):
         self.yaw_label.setText(f"Drone Angle Offset: {value}°")
         self.yaw_offset = float(value)
         self._update_visual_rotation()
+
+    def on_scale_slider_change(self, value):
+        new_scale = value / 10.0
+        self.movement_scale = new_scale
+        self.scale_label.setText(f"Movement Scale: {self.movement_scale:.2f}x")
+        # No update triggered here because scale now applies only to future deltas
 
     def _update_visual_rotation(self):
         # Combined rotation
@@ -929,25 +949,36 @@ class Mainwindow(QMainWindow):
                 
                 last_time = now
 
-                vgx = msg.get("vgx", 0)
-                vgy = msg.get("vgy", 0)
-                yaw_deg = msg.get("yaw", 0)
+                # Hard casting to avoid string/float mismatch issues
+                try:
+                    vgx = float(msg.get("vgx", 0))
+                    vgy = float(msg.get("vgy", 0))
+                    yaw_deg = float(msg.get("yaw", 0))
 
-                vx = vgx / 100
-                vy = vgy / 100
-                # Tello Yaw 0 is North (Up), but Math 0 is East (Right).
-                # So we subtract 90 degrees for movement calculation.
-                yaw_math = math.radians(yaw_deg - 90)
+                    vx = vgx / 100.0
+                    vy = vgy / 100.0
+                    # Tello Yaw 0 is North (Up), but Math 0 is East (Right).
+                    # So we subtract 90 degrees for movement calculation.
+                    yaw_math = math.radians(yaw_deg - 90)
 
-                wx = vx * math.cos(yaw_math) - vy * math.sin(yaw_math)
-                wy = vx * math.sin(yaw_math) + vy * math.cos(yaw_math)
+                    wx = vx * math.cos(yaw_math) - vy * math.sin(yaw_math)
+                    wy = vx * math.sin(yaw_math) + vy * math.cos(yaw_math)
 
-                self.drone_x += wx * dt
-                self.drone_y += wy * dt
+                    # Apply scale to DELTA (velocity integration) 
+                    # This means slider changes only affect FUTURE movement speed
+                    self.drone_x += wx * dt * self.movement_scale
+                    self.drone_y += wy * dt * self.movement_scale
 
-                self.drone_update.emit(self.drone_x, self.drone_y, float(yaw_deg))
-                self.battery_update.emit(int(msg.get("bat", 0)))
-                #print("state ok")
+                    self.drone_update.emit(self.drone_x, self.drone_y, yaw_deg)
+                    self.battery_update.emit(int(msg.get("bat", 0)))
+                    
+                    # Optional debug every ~1 second (assuming dt is roughly 0.1s so every 10 frames)
+                    if int(now) % 2 == 0 and int(now*10) % 10 == 0:
+                        print(f"[UI] Tello V: vgx={vgx}, vgy={vgy}, yaw={yaw_deg}, scale={self.movement_scale}")
+                        pass
+                        
+                except Exception as e:
+                    print(f"[UI] Error processing Tello state: {e} | msg={msg}")
 
         # Need to import time inside method or file level if not already
         import time 
@@ -1016,7 +1047,7 @@ class Mainwindow(QMainWindow):
             target_scene_size = PERSON_RADIUS_CM * 2 * scene_per_cm
 
             b = pin.boundingRect()
-            scale =50
+            scale =20
             pin.setScale(scale)
 
             pin.setTransformOriginPoint(b.center())
@@ -1091,6 +1122,7 @@ class Mainwindow(QMainWindow):
             
     def update_drone_position(self, x_m, y_m, yaw_deg=0.0):
         # 1. meters → centimeters
+        # Scale is already applied during integration (self.drone_x is in 'map meters')
         x_cm = x_m * 100.0
         y_cm = y_m * 100.0
 
@@ -1292,14 +1324,14 @@ class Mainwindow(QMainWindow):
                 updated = False
                 
                 if c_name == "ROTATE_CW":
-                     self.telemetry_yaw += c_val
+                     # self.telemetry_yaw += c_val
                      updated = True
                 elif c_name == "ROTATE_CCW":
-                     self.telemetry_yaw -= c_val
+                     # self.telemetry_yaw -= c_val
                      updated = True
 
-                if updated:
-                     self.update_drone_position(self.drone_x, self.drone_y, self.telemetry_yaw) 
+                # if updated:
+                #      self.update_drone_position(self.drone_x, self.drone_y, self.telemetry_yaw) 
             
         elif status == "FAIL":
             item.setText(f"{original_text} [FAILED]")

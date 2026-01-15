@@ -9,7 +9,7 @@ map:
   inflation_radius: 1
 
 path_planning:
-  max_jump_distance: 50
+  max_jump_distance: 100
 
 drone:
   speed: 10.0
